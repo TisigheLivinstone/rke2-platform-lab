@@ -1,0 +1,21 @@
+# Written by Terraform from the real VM IPs. Changes here are overwritten on the next apply.
+all:
+  vars:
+    ansible_user: ${admin_username}
+    ansible_ssh_common_args: "-o ProxyJump=${admin_username}@${bastion_ip} -o StrictHostKeyChecking=accept-new"
+    bastion_public_ip: ${bastion_ip}
+  children:
+    rke2_servers:
+      hosts:
+        ${control_plane}:
+          ansible_host: ${control_plane_ip}
+    rke2_agents:
+      hosts:
+%{ for name, ip in workers ~}
+        ${name}:
+          ansible_host: ${ip}
+%{ endfor ~}
+    # Workers that carry an empty data disk at LUN 0 for storage.
+    storage_nodes:
+      children:
+        rke2_agents:

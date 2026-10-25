@@ -1,0 +1,11 @@
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/tfplan
+crash.log
+
+# Written by Terraform, contain the IPs of a running environment
+ansible/inventory/hosts.yml
+ssh_config
