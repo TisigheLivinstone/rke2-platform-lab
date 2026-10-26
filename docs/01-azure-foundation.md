@@ -271,7 +271,36 @@ bash tests/01-foundation.sh
 
 ### Results
 
-Added after the first deployment.
+First deployment on 26 October 2026, South Africa North, with `free-trial.tfvars`.
+`terraform apply` created 34 resources in about four minutes, and every check passed:
+
+```
+The only way in: SSH through the bastion
+  PASS  bastion answers SSH from this machine
+  PASS  rke2lab-cp-1 reachable through the bastion
+  PASS  rke2lab-worker-1 reachable through the bastion
+  PASS  rke2lab-worker-2 reachable through the bastion
+
+The only way out: NAT Gateway
+  PASS  rke2lab-cp-1 goes out through the NAT IP
+  PASS  rke2lab-worker-1 goes out through the NAT IP
+  PASS  rke2lab-worker-2 goes out through the NAT IP
+
+No inbound path to the cluster
+  PASS  only the bastion and NAT have public IPs
+  PASS  no NSG rule opens port 6443
+
+Data disks
+  PASS  rke2lab-cp-1: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
+  PASS  rke2lab-worker-1: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
+  PASS  rke2lab-worker-2: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
+
+Result: 12 passed, 0 failed
+```
+
+The data disk shows up as `/dev/nvme0n2` on every VM, which is exactly the kind
+of kernel name I don't want to rely on. The test reaches it through the stable
+`/dev/disk/azure/data/by-lun/0` link instead and confirms it is not the OS disk.
 
 ## Cost
 

@@ -11,7 +11,7 @@ explains what problem the layer solves and why I chose it over the alternatives.
 
 | Part | Layer | Status |
 |---|---|---|
-| 1 | [Azure foundation](docs/01-azure-foundation.md): private network, bastion, NAT Gateway, VMs | In progress |
+| 1 | [Azure foundation](docs/01-azure-foundation.md): private network, bastion, NAT Gateway, VMs | Deployed and tested |
 | 2 | Automation with Ansible | |
 | 3 | Kubernetes with RKE2 | |
 | 4 | Pod networking with Cilium | |
