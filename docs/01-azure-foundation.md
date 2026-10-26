@@ -67,32 +67,6 @@ hardware I can throw away after each session.
 The trade-off is that everything AKS would handle is now my job, and that is
 exactly what I want to practise.
 
-### Terraform instead of the portal, Bicep or Pulumi
-
-Clicking through the portal can't be repeated or reviewed. Bicep and ARM
-templates are solid but only work on Azure. Pulumi is nice but has a smaller
-community. Terraform works the same way on Azure, AWS and GCP, `plan` shows
-what will change before anything does, and it is what most job adverts ask for.
-
-Terraform also writes the two files the next part needs (the Ansible inventory
-and an SSH config), so I never copy IP addresses by hand.
-
-For anyone coming from AWS: a VNet is a VPC, an NSG is close to a security
-group, and a resource group has no direct equivalent (the closest is a
-CloudFormation stack).
-
-### A bastion VM instead of Azure Bastion
-
-| Option | Rough cost | Verdict |
-|---|---|---|
-| Public IP on every VM | low | Every node gets scanned from the internet. No. |
-| VPN gateway | ~$140/month | Good for a team, too much for one person |
-| Azure Bastion | ~$140/month (Basic), more for Standard | The production choice, nothing to patch |
-| 1 vCPU VM as a jump host | ~$10 to $30/month | Same idea, but I have to keep it patched |
-
-The bastion VM gives the same shape as Azure Bastion, one locked-down way in,
-for a fraction of the price. In production I would use Azure Bastion or a VPN.
-
 ### Two subnets instead of one
 
 If the bastion and the cluster shared a subnet, anyone who broke into the
@@ -105,22 +79,7 @@ Capture: Virtual networks > rke2lab-vnet > Subnets (columns: name, address range
 Blur: subscription ID.
 -->
 
-### NAT Gateway for outbound traffic
-
-The private VMs need to download things. I looked at four other ways to do that:
-
-- **Azure default outbound access.** It works without any setup, but the IP is
-  not fixed and Microsoft is retiring it for new networks. I turn it off
-  explicitly with `default_outbound_access_enabled = false`.
-- **A public IP on each VM.** That makes every VM reachable from the internet
-  and defeats the point of a private subnet.
-- **Load balancer outbound rules.** It works but needs more setup for the same result.
-- **Azure Firewall.** It can control which sites the VMs are allowed to reach,
-  which is great, but it costs roughly $900 a month.
-
-The NAT Gateway is outbound only, has one fixed public IP and costs about $33 a
-month plus data. A side benefit of the fixed IP: if a service ever needs to
-allow-list the cluster, there is one address to give them.
+### NAT Gateway
 
 One thing that differs from AWS: there, a NAT Gateway sits inside a public
 subnet. In Azure it is not inside any subnet. It is its own resource with its
@@ -132,25 +91,6 @@ The NAT Gateway lists the private subnet as the only subnet it serves, and one o
 Capture: NAT gateways > rke2lab-natgw > Subnets, then Outbound IP (two screenshots, or one if both fit).
 Blur: subscription ID.
 -->
-
-### NSGs on the subnets
-
-NSGs are free and enough to say "port 22 only, and only from here". I put them
-on the subnets rather than on each VM's network card, so the whole policy is in
-one place. The last rule in the private NSG denies everything else from the
-VNet, which overrides Azure's default of allowing all traffic inside a VNet.
-
-<!-- SCREENSHOT
-These are the inbound rules on the private subnet: SSH from the public subnet, everything between cluster VMs, and a deny for the rest of the VNet ahead of the Azure defaults.
-Capture: Network security groups > rke2lab-private-nsg > Inbound security rules.
-Blur: subscription ID.
--->
-
-### Ubuntu 24.04
-
-RKE2 supports it, it is free, it gets updates until 2029, and it is the Linux
-most people have used. SLE Micro or RHEL would work just as well in a company
-that already runs them.
 
 ### Two workers here, at least three in production
 
@@ -181,71 +121,13 @@ control plane free of storage and application work:
 Moving to the production layout is a variable change, not a redesign:
 `worker_count = 3` and `control_plane_data_disk = false` (both defaults).
 
-### VM sizes
 
-**Production defaults:** a D2s_v5 (2 vCPU, 8 GiB) for the control plane, enough
-for one Kubernetes server with etcd, and D4s_v5 (4 vCPU, 16 GiB) workers, with
-room for storage and monitoring later.
-
-**This deployment:** F1ams_v7 (1 vCPU, 8 GiB) for the three cluster VMs and
-F1as_v7 (1 vCPU, 4 GiB) for the bastion, which together use exactly the 4 vCPUs
-the trial allows. That is below the 2 vCPUs RKE2 recommends for a server node.
-It is enough for the first parts; storage and monitoring will be tight, and the
-write-ups for those parts will say where.
-
-I avoided burstable B-series VMs for the cluster. They run on CPU credits and
-get throttled when the credits run out, and etcd does not handle that kind of
-pause well. A stalled etcd can lose its leader and freeze the cluster. The
-F-series v7 sizes give a full, unthrottled vCPU.
-
-The v7 sizes only support NVMe disk controllers, so this deployment sets
-`disk_controller_type = "NVMe"`. The production v5 sizes use SCSI.
 
 ### Premium SSD
 
 etcd writes to disk on every change and waits for the write to finish. A slow
 disk means a slow and unstable cluster. Premium SSD keeps that latency low and
 predictable. The cluster storage added later has the same need.
-
-### The data disk at LUN 0
-
-Each storage node gets a second, empty disk that will later become cluster
-storage. Linux names disks in the order it finds them (`/dev/sdb`, or
-`/dev/nvme0n2` on NVMe), and that order can change after a reboot. The storage
-software wipes whatever disk it is pointed at, so pointing it at a kernel name
-is a real risk: one day that name could be the OS disk.
-
-Azure attaches data disks to numbered slots called LUNs, and Ubuntu on Azure
-creates a fixed link for each slot. `/dev/disk/azure/data/by-lun/0` always means
-the disk in slot 0, on SCSI and NVMe VMs alike, so that is the only path I use.
-
-<!-- SCREENSHOT
-On each storage node the data disk sits at LUN 0, next to the OS disk.
-Capture: Virtual machines > rke2lab-worker-1 > Disks (OS disk and data disk with LUN 0 visible).
-Blur: subscription ID.
--->
-
-### Fixed private IPs
-
-Later parts put IP addresses into config files (the Kubernetes server address,
-certificate names). Static IPs (`.10` for the control plane, `.21` upwards for
-the workers) mean those files never go stale.
-
-### Auto-shutdown instead of budget alerts
-
-Every VM shuts down at 22:00, so a lab I forget about costs me one evening, not a
-weekend.
-
-<!-- SCREENSHOT
-Each VM carries its own shutdown schedule.
-Capture: Virtual machines > rke2lab-cp-1 > Auto-shutdown (enabled, 22:00, time zone).
-Blur: subscription ID.
---> I thought about budget alerts too and left them out. They only send an
-email, they don't stop anything. My real cost control is destroying the lab
-after each session. Some subscription types (free trial, sponsorship, some
-student offers) don't support budgets at all, which would break `terraform
-apply`. In a shared environment that runs for months, budgets with alerts to a
-team channel make sense. Here they would not add anything.
 
 ### What is not here yet
 
@@ -296,58 +178,5 @@ to get the production layout.
 ```bash
 bash tests/01-foundation.sh
 ```
-
-| What should be true | How the script checks it |
-|---|---|
-| The only way in is SSH through the bastion | SSH to the bastion, then through it to every VM |
-| The only way out is the NAT Gateway | Each VM asks a public IP echo service for its address; it must match the NAT IP |
-| Nothing can reach the private subnet from outside | Only the bastion and the NAT Gateway own public IPs, and no NSG rule opens 6443 |
-| Each storage node has an empty 32 GiB disk at LUN 0 | The LUN 0 link points to a 32 GiB disk with no filesystem that is not the OS disk |
-| VMs that are not storage nodes have no data disk | The LUN 0 link does not exist on them (only applies to the production layout) |
-
-### Results
-
-First deployment on 26 October 2026, South Africa North, with `free-trial.tfvars`.
-`terraform apply` created 34 resources in about four minutes, and every check passed:
-
-```
-The only way in: SSH through the bastion
-  PASS  bastion answers SSH from this machine
-  PASS  rke2lab-cp-1 reachable through the bastion
-  PASS  rke2lab-worker-1 reachable through the bastion
-  PASS  rke2lab-worker-2 reachable through the bastion
-
-The only way out: NAT Gateway
-  PASS  rke2lab-cp-1 goes out through the NAT IP
-  PASS  rke2lab-worker-1 goes out through the NAT IP
-  PASS  rke2lab-worker-2 goes out through the NAT IP
-
-No inbound path to the cluster
-  PASS  only the bastion and NAT have public IPs
-  PASS  no NSG rule opens port 6443
-
-Data disks
-  PASS  rke2lab-cp-1: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
-  PASS  rke2lab-worker-1: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
-  PASS  rke2lab-worker-2: LUN 0 is /dev/nvme0n2, 32 GiB, empty, separate from the OS disk (/dev/nvme0n1)
-
-Result: 12 passed, 0 failed
-```
-
-The data disk shows up as `/dev/nvme0n2` on every VM, which is exactly the kind
-of kernel name I don't want to rely on. The test reaches it through the stable
-`/dev/disk/azure/data/by-lun/0` link instead and confirms it is not the OS disk.
-
-## Cost
-
-Rough figures for South Africa North, pay-as-you-go rates. On the Free Trial
-this comes out of the trial credit. Prices change, so check the Azure pricing
-calculator.
-
-| | VMs running | VMs stopped |
-|---|---|---|
-| 3 × F1ams_v7, 1 × F1as_v7 (4 vCPUs in total) | ~$0.30/hour | $0 |
-| NAT Gateway | ~$0.05/hour | ~$0.05/hour |
-| Disks and public IPs | ~$2/day | ~$2/day |
 
 `terraform destroy` takes it to zero, and rebuilding takes about five minutes.
