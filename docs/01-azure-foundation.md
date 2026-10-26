@@ -47,6 +47,12 @@ from the internet can start a connection to the private subnet: there is no
 public IP there and no rule that would allow it. The Kubernetes API port (6443)
 is not opened anywhere.
 
+<!-- SCREENSHOT
+Everything above sits in one resource group, which is also what makes cleanup a single command.
+Capture: Azure portal > Resource groups > rke2lab-rg > Overview, with the full resource list visible.
+Blur: subscription ID.
+-->
+
 ## Decisions
 
 ### RKE2 on VMs instead of AKS
@@ -82,7 +88,7 @@ CloudFormation stack).
 | Public IP on every VM | low | Every node gets scanned from the internet. No. |
 | VPN gateway | ~$140/month | Good for a team, too much for one person |
 | Azure Bastion | ~$140/month (Basic), more for Standard | The production choice, nothing to patch |
-| B1s VM as a jump host | ~$8/month | Same idea, but I have to keep it patched |
+| 1 vCPU VM as a jump host | ~$10 to $30/month | Same idea, but I have to keep it patched |
 
 The bastion VM gives the same shape as Azure Bastion, one locked-down way in,
 for a fraction of the price. In production I would use Azure Bastion or a VPN.
@@ -92,6 +98,12 @@ for a fraction of the price. In production I would use Azure Bastion or a VPN.
 If the bastion and the cluster shared a subnet, anyone who broke into the
 bastion would already be next to the nodes. With separate subnets, the bastion
 sits outside the cluster's firewall and can only reach it on port 22.
+
+<!-- SCREENSHOT
+In the portal the two subnets show up side by side, each with its own NSG, and only the private one has the NAT Gateway attached.
+Capture: Virtual networks > rke2lab-vnet > Subnets (columns: name, address range, NSG, NAT gateway).
+Blur: subscription ID.
+-->
 
 ### NAT Gateway for outbound traffic
 
@@ -115,12 +127,24 @@ subnet. In Azure it is not inside any subnet. It is its own resource with its
 own public IP, attached to the subnets it serves. That is why the diagram shows
 it outside both subnets, with an arrow from the private subnet.
 
+<!-- SCREENSHOT
+The NAT Gateway lists the private subnet as the only subnet it serves, and one outbound public IP.
+Capture: NAT gateways > rke2lab-natgw > Subnets, then Outbound IP (two screenshots, or one if both fit).
+Blur: subscription ID.
+-->
+
 ### NSGs on the subnets
 
 NSGs are free and enough to say "port 22 only, and only from here". I put them
 on the subnets rather than on each VM's network card, so the whole policy is in
 one place. The last rule in the private NSG denies everything else from the
 VNet, which overrides Azure's default of allowing all traffic inside a VNet.
+
+<!-- SCREENSHOT
+These are the inbound rules on the private subnet: SSH from the public subnet, everything between cluster VMs, and a deny for the rest of the VNet ahead of the Azure defaults.
+Capture: Network security groups > rke2lab-private-nsg > Inbound security rules.
+Blur: subscription ID.
+-->
 
 ### Ubuntu 24.04
 
@@ -195,6 +219,12 @@ Azure attaches data disks to numbered slots called LUNs, and Ubuntu on Azure
 creates a fixed link for each slot. `/dev/disk/azure/data/by-lun/0` always means
 the disk in slot 0, on SCSI and NVMe VMs alike, so that is the only path I use.
 
+<!-- SCREENSHOT
+On each storage node the data disk sits at LUN 0, next to the OS disk.
+Capture: Virtual machines > rke2lab-worker-1 > Disks (OS disk and data disk with LUN 0 visible).
+Blur: subscription ID.
+-->
+
 ### Fixed private IPs
 
 Later parts put IP addresses into config files (the Kubernetes server address,
@@ -204,7 +234,13 @@ the workers) mean those files never go stale.
 ### Auto-shutdown instead of budget alerts
 
 Every VM shuts down at 22:00, so a lab I forget about costs me one evening, not a
-weekend. I thought about budget alerts too and left them out. They only send an
+weekend.
+
+<!-- SCREENSHOT
+Each VM carries its own shutdown schedule.
+Capture: Virtual machines > rke2lab-cp-1 > Auto-shutdown (enabled, 22:00, time zone).
+Blur: subscription ID.
+--> I thought about budget alerts too and left them out. They only send an
 email, they don't stop anything. My real cost control is destroying the lab
 after each session. Some subscription types (free trial, sponsorship, some
 student offers) don't support budgets at all, which would break `terraform

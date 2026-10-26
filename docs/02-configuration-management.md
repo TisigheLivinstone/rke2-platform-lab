@@ -245,3 +245,9 @@ bash tests/02-automation.sh
 ### Results
 
 Added after the first run.
+
+<!-- SCREENSHOT
+The second run of the playbook, finishing with changed=0 on every VM.
+Capture: the terminal after bash tests/02-automation.sh, showing the PLAY RECAP of the second run and the PASS lines.
+Blur: bastion public IP.
+-->
