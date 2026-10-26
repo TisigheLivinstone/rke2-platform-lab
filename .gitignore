@@ -12,3 +12,4 @@ ssh_config
 
 # Editable diagram sources. Only the exported .drawio.png files are published.
 *.drawio
+known_hosts

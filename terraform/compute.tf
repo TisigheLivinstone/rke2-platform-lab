@@ -1,5 +1,7 @@
 locals {
   ssh_public_key = file(pathexpand(var.ssh_public_key_path))
+  # The private key sits next to the public one, without the .pub suffix.
+  ssh_private_key_path = trimsuffix(var.ssh_public_key_path, ".pub")
 
   control_plane_name = "${var.prefix}-cp-1"
   control_plane_ip   = cidrhost(var.private_subnet_cidr, 10)

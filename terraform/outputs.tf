@@ -40,6 +40,8 @@ resource "local_file" "ansible_inventory" {
     control_plane_ip = local.control_plane_ip
     workers          = local.workers
     storage_nodes    = local.storage_nodes
+    private_key      = local.ssh_private_key_path
+    known_hosts      = local.known_hosts_path
   })
 }
 
@@ -52,5 +54,24 @@ resource "local_file" "ssh_config" {
     control_plane    = azurerm_linux_virtual_machine.control_plane.name
     control_plane_ip = local.control_plane_ip
     workers          = local.workers
+    private_key      = local.ssh_private_key_path
+    known_hosts      = local.known_hosts_path
   })
+}
+
+# The cluster VMs get the same private IPs on every rebuild but new host keys.
+# A lab-only known_hosts file, reset whenever the bastion is recreated, stops SSH
+# from refusing to connect after a rebuild without turning host checking off.
+locals {
+  known_hosts_path = abspath("${path.module}/../known_hosts")
+}
+
+resource "local_file" "known_hosts" {
+  filename        = local.known_hosts_path
+  file_permission = "0644"
+  content         = ""
+
+  lifecycle {
+    replace_triggered_by = [azurerm_linux_virtual_machine.bastion.id]
+  }
 }
