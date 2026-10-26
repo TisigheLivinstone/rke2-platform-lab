@@ -17,6 +17,42 @@ So the problem for this part: **describe the OS baseline once, in code, and
 apply it to every VM the same way, as often as needed, without breaking
 anything that is already correct.**
 
+## What Ansible is and how it works
+
+Terraform built the VMs. Ansible sets up what's inside them. I write down how a
+server should look, and Ansible makes every server match it, over SSH.
+
+It has three pieces:
+
+- **An inventory**: the list of machines and the groups they belong to. Here
+  Terraform writes it, so it always has the real IPs.
+- **Playbooks and roles**: the checklist. A playbook says which roles run on
+  which groups; a role is a reusable bundle of tasks.
+- **Tasks**: each one describes a state, not a command.
+
+```yaml
+- name: Keep chrony running
+  ansible.builtin.service:
+    name: chrony
+    state: started
+```
+
+This doesn't mean "start chrony". It means "chrony should be running". Ansible
+connects, checks, and only acts if the VM isn't already there. If chrony is
+running it reports `ok` and touches nothing; if it's stopped it starts it and
+reports `changed`. That is what lets me run the same playbook as often as I
+like: the first run does the work, the second run finds nothing to do. The test
+for this part checks exactly that.
+
+Nothing gets installed on the VMs for this. Ansible only needs SSH and Python,
+and Ubuntu has both. It even reuses the path from Part 1: straight to the
+bastion, and through the bastion to the private subnet.
+
+Without it, the same work is me running `ssh worker-1`, then `sudo apt
+upgrade`, then editing `sshd_config` in nano, then doing it all again on the
+next three machines. One typo on one VM and they're no longer the same, and
+there's no file anywhere that says how they were set up.
+
 ## What gets built
 
 Nothing new in Azure. This part changes what is inside the VMs.
@@ -55,6 +91,21 @@ the cluster VMs through the bastion, the same path I use by hand.
   running") rather than a command to run, and only acts if the VM isn't
   already in that state. That property, idempotence, is what makes it safe to
   run again and again. The test for this part checks it directly.
+
+### Where Ansible falls short
+
+Ansible only acts when someone runs it. If a person changes a VM by hand
+afterwards, nothing notices until the next run, whereas a Puppet agent would
+put it back on its own within the hour. Running the playbook on a schedule from
+CI (Part 8) closes most of that gap.
+
+It's also slower than an agent across thousands of servers, because it works
+over SSH. At four VMs that doesn't matter.
+
+And it isn't the right tool for creating cloud resources. It can do it, but
+Terraform tracks what exists and plans changes before making them, which is why
+the split here is Terraform for the infrastructure and Ansible for what runs
+inside it.
 
 ### Running Ansible from WSL
 
