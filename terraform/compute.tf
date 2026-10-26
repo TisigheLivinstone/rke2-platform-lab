@@ -1,12 +1,26 @@
 locals {
   ssh_public_key = file(pathexpand(var.ssh_public_key_path))
 
-  control_plane_ip = cidrhost(var.private_subnet_cidr, 10)
+  control_plane_name = "${var.prefix}-cp-1"
+  control_plane_ip   = cidrhost(var.private_subnet_cidr, 10)
 
   workers = {
     for i in range(var.worker_count) :
     "${var.prefix}-worker-${i + 1}" => cidrhost(var.private_subnet_cidr, 21 + i)
   }
+
+  # VMs that get an empty data disk for cluster storage. In production that is
+  # only the workers. On a small subscription the control plane can be added
+  # so storage still has three machines to spread copies across.
+  storage_nodes = concat(
+    var.control_plane_data_disk ? [local.control_plane_name] : [],
+    keys(local.workers),
+  )
+
+  vm_ids = merge(
+    { (local.control_plane_name) = azurerm_linux_virtual_machine.control_plane.id },
+    { for name, vm in azurerm_linux_virtual_machine.worker : name => vm.id },
+  )
 
   ubuntu_image = {
     publisher = "Canonical"
@@ -46,6 +60,7 @@ resource "azurerm_linux_virtual_machine" "bastion" {
   location                        = azurerm_resource_group.lab.location
   resource_group_name             = azurerm_resource_group.lab.name
   size                            = var.bastion_vm_size
+  disk_controller_type            = var.disk_controller_type
   admin_username                  = var.admin_username
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.bastion.id]
@@ -73,7 +88,7 @@ resource "azurerm_linux_virtual_machine" "bastion" {
 # Control plane
 
 resource "azurerm_network_interface" "control_plane" {
-  name                = "${var.prefix}-cp-1-nic"
+  name                = "${local.control_plane_name}-nic"
   location            = azurerm_resource_group.lab.location
   resource_group_name = azurerm_resource_group.lab.name
   tags                = var.tags
@@ -87,10 +102,11 @@ resource "azurerm_network_interface" "control_plane" {
 }
 
 resource "azurerm_linux_virtual_machine" "control_plane" {
-  name                            = "${var.prefix}-cp-1"
+  name                            = local.control_plane_name
   location                        = azurerm_resource_group.lab.location
   resource_group_name             = azurerm_resource_group.lab.name
   size                            = var.control_plane_vm_size
+  disk_controller_type            = var.disk_controller_type
   admin_username                  = var.admin_username
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.control_plane.id]
@@ -138,6 +154,7 @@ resource "azurerm_linux_virtual_machine" "worker" {
   location                        = azurerm_resource_group.lab.location
   resource_group_name             = azurerm_resource_group.lab.name
   size                            = var.worker_vm_size
+  disk_controller_type            = var.disk_controller_type
   admin_username                  = var.admin_username
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.worker[each.key].id]
@@ -162,10 +179,11 @@ resource "azurerm_linux_virtual_machine" "worker" {
   }
 }
 
-# One empty data disk per worker, kept for cluster storage. Attached at LUN 0 so it
-# always shows up as /dev/disk/azure/scsi1/lun0, whatever /dev/sdX name it gets.
+# One empty data disk per storage node, attached at LUN 0. Ubuntu on Azure links
+# it as /dev/disk/azure/data/by-lun/0 on both SCSI and NVMe VMs, whatever
+# /dev/sdX or /dev/nvmeXnY name the kernel gives it.
 resource "azurerm_managed_disk" "data" {
-  for_each             = local.workers
+  for_each             = toset(local.storage_nodes)
   name                 = "${each.key}-data-disk"
   location             = azurerm_resource_group.lab.location
   resource_group_name  = azurerm_resource_group.lab.name
@@ -176,9 +194,9 @@ resource "azurerm_managed_disk" "data" {
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "data" {
-  for_each           = local.workers
+  for_each           = toset(local.storage_nodes)
   managed_disk_id    = azurerm_managed_disk.data[each.key].id
-  virtual_machine_id = azurerm_linux_virtual_machine.worker[each.key].id
+  virtual_machine_id = local.vm_ids[each.key]
   lun                = 0
   caching            = "None"
 }
@@ -188,8 +206,7 @@ resource "azurerm_virtual_machine_data_disk_attachment" "data" {
 resource "azurerm_dev_test_global_vm_shutdown_schedule" "all" {
   for_each = var.auto_shutdown_time == null ? {} : merge(
     { bastion = azurerm_linux_virtual_machine.bastion.id },
-    { control_plane = azurerm_linux_virtual_machine.control_plane.id },
-    { for k, vm in azurerm_linux_virtual_machine.worker : k => vm.id },
+    local.vm_ids,
   )
 
   virtual_machine_id    = each.value

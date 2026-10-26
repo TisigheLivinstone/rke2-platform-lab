@@ -19,6 +19,11 @@ output "nat_egress_ip" {
   value       = azurerm_public_ip.nat.ip_address
 }
 
+output "storage_nodes" {
+  description = "VMs that have an empty data disk at LUN 0."
+  value       = local.storage_nodes
+}
+
 output "resource_group" {
   value = azurerm_resource_group.lab.name
 }
@@ -34,6 +39,7 @@ resource "local_file" "ansible_inventory" {
     control_plane    = azurerm_linux_virtual_machine.control_plane.name
     control_plane_ip = local.control_plane_ip
     workers          = local.workers
+    storage_nodes    = local.storage_nodes
   })
 }
 

@@ -5,18 +5,23 @@ set -uo pipefail
 
 TF="terraform -chdir=terraform"
 SSH="ssh -F ssh_config -o BatchMode=yes -o ConnectTimeout=15"
+DISK=/dev/disk/azure/data/by-lun/0
 pass=0; fail=0
-ok()   { echo "  PASS  $1"; pass=$((pass + 1)); }
-bad()  { echo "  FAIL  $1"; fail=$((fail + 1)); }
+ok()    { echo "  PASS  $1"; pass=$((pass + 1)); }
+bad()   { echo "  FAIL  $1"; fail=$((fail + 1)); }
 check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else bad "$1"; fi; }
+list()  { tr -d '[]{}"\r ' | tr ',' '\n' | cut -d: -f1; }
 
 echo "Reading Terraform outputs"
 BASTION_IP=$($TF output -raw bastion_public_ip)
 NAT_IP=$($TF output -raw nat_egress_ip)
-CP=$($TF output -raw control_plane_name)
-WORKERS=$($TF output -json worker_private_ips | tr -d '{}"' | tr ',' '\n' | cut -d: -f1)
 RG=$($TF output -raw resource_group)
+CP=$($TF output -raw control_plane_name)
+WORKERS=$($TF output -json worker_private_ips | list)
+STORAGE=$($TF output -json storage_nodes | list)
 echo "  bastion=$BASTION_IP  nat=$NAT_IP  control plane=$CP"
+echo "  workers: $(echo $WORKERS)"
+echo "  storage nodes: $(echo $STORAGE)"
 
 echo
 echo "The only way in: SSH through the bastion"
@@ -46,17 +51,22 @@ else
 fi
 
 echo
-echo "Data disks (workers only)"
-for host in $WORKERS; do
-  info=$($SSH "$host" 'd=$(readlink -f /dev/disk/azure/scsi1/lun0) && echo "$d $(lsblk -bdno SIZE "$d") [$(lsblk -no FSTYPE "$d" | tr -d "\n ")]"' 2>/dev/null)
-  dev=$(echo "$info" | awk '{print $1}'); size=$(echo "$info" | awk '{print $2}'); fs=$(echo "$info" | awk '{print $3}')
-  if [ -n "$dev" ] && [ "$size" = "34359738368" ] && [ "$fs" = "[]" ]; then
-    ok "$host: lun0 -> $dev, 32 GiB, empty"
+echo "Data disks"
+# Prints: <data disk device> <size in bytes> [<filesystem>] <OS disk device>
+probe='d=$(readlink -f '"$DISK"'); r=$(lsblk -nro PKNAME,MOUNTPOINT | awk '\''$2=="/"{print $1}'\''); echo "$d $(lsblk -bdno SIZE "$d") [$(lsblk -no FSTYPE "$d" | tr -d "\n ")] /dev/$r"'
+for host in $STORAGE; do
+  info=$($SSH "$host" "$probe" 2>/dev/null)
+  read -r dev size fs root <<< "$info"
+  if [ -n "$dev" ] && [ "$size" = "34359738368" ] && [ "$fs" = "[]" ] && [ "$dev" != "$root" ]; then
+    ok "$host: LUN 0 is $dev, 32 GiB, empty, separate from the OS disk ($root)"
   else
-    bad "$host: lun0 check failed ($info)"
+    bad "$host: data disk check failed ($info)"
   fi
 done
-check "$CP has no data disk at lun0" "! $SSH $CP test -e /dev/disk/azure/scsi1/lun0"
+for host in $CP $WORKERS; do
+  case " $(echo $STORAGE) " in *" $host "*) continue ;; esac
+  check "$host has no data disk" "! $SSH $host test -e $DISK"
+done
 
 echo
 echo "Result: $pass passed, $fail failed"

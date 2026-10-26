@@ -26,9 +26,18 @@ This part covers those five points and nothing else.
 | Bastion | `rke2lab-bastion` | The only way in, over SSH |
 | NAT Gateway | `rke2lab-natgw` + `rke2lab-nat-pip` | The only way out, for the private subnet |
 | NSGs | `rke2lab-public-nsg`, `rke2lab-private-nsg` | One firewall per subnet |
-| Cluster VMs | `rke2lab-cp-1`, `rke2lab-worker-1` to `3` | Future control plane and workers |
-| Data disks | `rke2lab-worker-N-data-disk` | One empty 32 GiB disk per worker, at LUN 0 |
+| Cluster VMs | `rke2lab-cp-1`, `rke2lab-worker-1`, `rke2lab-worker-2` | Future control plane and workers |
+| Data disks | `rke2lab-<vm>-data-disk` | One empty 32 GiB disk at LUN 0 on each storage node (cp-1 and both workers here) |
 | Shutdown schedules | | Every VM stops at 22:00 |
+
+Everything runs in South Africa North, the closest Azure region to me, and the
+only one where every VM size below was available to my subscription.
+
+The layout above is scaled to fit an Azure Free Trial, which caps every region
+at 4 vCPUs. The production version of the same design has a dedicated control
+plane and at least three workers. That is the Terraform default; the trial
+sizes live in `terraform/free-trial.tfvars`. The section on worker count below
+explains the difference.
 
 Traffic is simple to follow. I connect from my laptop to the bastion's public IP
 on port 22, which the public NSG only accepts from my home IP. From the bastion
@@ -119,16 +128,54 @@ RKE2 supports it, it is free, it gets updates until 2029, and it is the Linux
 most people have used. SLE Micro or RHEL would work just as well in a company
 that already runs them.
 
+### Two workers here, at least three in production
+
+The Free Trial allows 4 vCPUs per region and the smallest VM has 1 vCPU, so a
+bastion plus a control plane plus three workers (5 VMs) cannot fit. I kept the
+bastion, because removing it would put a cluster node on the internet, and
+dropped to two workers. The control plane gets a data disk as well, so the
+storage layer still has three machines to work with.
+
+For production I would use at least three dedicated workers, and keep the
+control plane free of storage and application work:
+
+- **Three copies of data need three machines.** The storage layer in Part 5
+  keeps every piece of data on three different nodes. With fewer nodes it
+  either cannot place the third copy or keeps two copies on one machine, which
+  defeats the point.
+- **Voting needs an odd number.** Storage monitors, like etcd, only work while
+  a majority agrees. Three can lose one and still have a majority (2 of 3). Two
+  cannot: losing one leaves 1 of 2, and storage stops.
+- **Somewhere to move work to.** When a node fails or is drained for patching,
+  its pods move to the others. With two workers, every drain puts the whole
+  cluster on one machine. With three, there is still room to spread out.
+- **A quiet control plane.** etcd needs fast, predictable disk writes. A
+  control plane that also serves storage shares its disk and CPU with that
+  work, so a busy storage node can slow down the whole cluster. In production
+  it runs Kubernetes and nothing else.
+
+Moving to the production layout is a variable change, not a redesign:
+`worker_count = 3` and `control_plane_data_disk = false` (both defaults).
+
 ### VM sizes
 
-The bastion is a B1s, a burstable VM that runs on CPU credits. That is fine for
-something that only forwards SSH. It is not fine for cluster nodes: when the
-credits run out the VM is throttled, and etcd is very sensitive to that kind of
-pause. A stalled etcd can lose its leader and freeze the cluster.
+**Production defaults:** a D2s_v5 (2 vCPU, 8 GiB) for the control plane, enough
+for one Kubernetes server with etcd, and D4s_v5 (4 vCPU, 16 GiB) workers, with
+room for storage and monitoring later.
 
-So the control plane is a D2s_v5 (2 vCPU, 8 GiB), enough for one Kubernetes
-server with etcd. The workers are D4s_v5 (4 vCPU, 16 GiB) to leave room for
-storage and monitoring later.
+**This deployment:** F1ams_v7 (1 vCPU, 8 GiB) for the three cluster VMs and
+F1as_v7 (1 vCPU, 4 GiB) for the bastion, which together use exactly the 4 vCPUs
+the trial allows. That is below the 2 vCPUs RKE2 recommends for a server node.
+It is enough for the first parts; storage and monitoring will be tight, and the
+write-ups for those parts will say where.
+
+I avoided burstable B-series VMs for the cluster. They run on CPU credits and
+get throttled when the credits run out, and etcd does not handle that kind of
+pause well. A stalled etcd can lose its leader and freeze the cluster. The
+F-series v7 sizes give a full, unthrottled vCPU.
+
+The v7 sizes only support NVMe disk controllers, so this deployment sets
+`disk_controller_type = "NVMe"`. The production v5 sizes use SCSI.
 
 ### Premium SSD
 
@@ -138,24 +185,20 @@ predictable. The cluster storage added later has the same need.
 
 ### The data disk at LUN 0
 
-Each worker gets a second, empty disk that will later become cluster storage.
-Linux names disks `/dev/sda`, `/dev/sdb` and so on in the order it finds them,
-and that order can change after a reboot. The storage software wipes whatever
-disk it is pointed at, so pointing it at `/dev/sdb` is a real risk: one day that
-could be the OS disk.
+Each storage node gets a second, empty disk that will later become cluster
+storage. Linux names disks in the order it finds them (`/dev/sdb`, or
+`/dev/nvme0n2` on NVMe), and that order can change after a reboot. The storage
+software wipes whatever disk it is pointed at, so pointing it at a kernel name
+is a real risk: one day that name could be the OS disk.
 
 Azure attaches data disks to numbered slots called LUNs, and Ubuntu on Azure
-creates a fixed path for each slot. `/dev/disk/azure/scsi1/lun0` always means
-the disk in slot 0, so that is the only path I use.
-
-There are three workers because the storage layer will keep three copies of
-everything, each on a different machine. Terraform refuses `worker_count`
-below 3.
+creates a fixed link for each slot. `/dev/disk/azure/data/by-lun/0` always means
+the disk in slot 0, on SCSI and NVMe VMs alike, so that is the only path I use.
 
 ### Fixed private IPs
 
 Later parts put IP addresses into config files (the Kubernetes server address,
-certificate names). Static IPs (`.10` for the control plane, `.21` to `.23` for
+certificate names). Static IPs (`.10` for the control plane, `.21` upwards for
 the workers) mean those files never go stale.
 
 ### Auto-shutdown instead of budget alerts
@@ -177,16 +220,16 @@ goes for DNS, load balancers and monitoring.
 
 ## What the next part needs from this one
 
-At the end of this part there are four blank Ubuntu machines that can only be
-reached through the bastion. Nothing is installed on them.
+At the end of this part there are three blank Ubuntu cluster VMs that can only
+be reached through the bastion. Nothing is installed on them.
 
 Terraform writes two files from the real IPs:
 
 - `ansible/inventory/hosts.yml` lists the control plane, the workers, and which
-  workers carry a data disk (`storage_nodes`).
+  VMs carry a data disk (`storage_nodes`).
 - `ssh_config` tells SSH how to reach every VM through the bastion.
 
-Setting up four machines by hand is slow, easy to get wrong and impossible to
+Setting up several machines by hand is slow, easy to get wrong and impossible to
 repeat exactly. Part 2 uses those two files to do it with Ansible instead.
 
 ## Code
@@ -194,7 +237,8 @@ repeat exactly. Part 2 uses those two files to do it with Ansible instead.
 | File | Contents |
 |---|---|
 | `terraform/versions.tf` | Terraform and provider versions |
-| `terraform/variables.tf` | Settings. Rejects `0.0.0.0/0` as the admin IP and fewer than 3 workers. |
+| `terraform/variables.tf` | Settings, with production defaults. Rejects `0.0.0.0/0` as the admin IP. |
+| `terraform/free-trial.tfvars` | Smaller sizes and 2 workers for a 4-vCPU subscription |
 | `terraform/network.tf` | Resource group, VNet, subnets, NAT Gateway, NSGs |
 | `terraform/compute.tf` | Bastion, control plane, workers, data disks, shutdown schedules |
 | `terraform/outputs.tf`, `terraform/templates/` | Outputs, the Ansible inventory and `ssh_config` |
@@ -204,9 +248,12 @@ repeat exactly. Part 2 uses those two files to do it with Ansible instead.
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 terraform -chdir=terraform init
-terraform -chdir=terraform plan -out=tfplan
+terraform -chdir=terraform plan -var-file=free-trial.tfvars -out=tfplan
 terraform -chdir=terraform apply tfplan
 ```
+
+On a subscription without the 4-vCPU cap, leave out `-var-file=free-trial.tfvars`
+to get the production layout.
 
 ## Test
 
@@ -219,8 +266,8 @@ bash tests/01-foundation.sh
 | The only way in is SSH through the bastion | SSH to the bastion, then through it to every VM |
 | The only way out is the NAT Gateway | Each VM asks a public IP echo service for its address; it must match the NAT IP |
 | Nothing can reach the private subnet from outside | Only the bastion and the NAT Gateway own public IPs, and no NSG rule opens 6443 |
-| Each worker has an empty 32 GiB disk at LUN 0 | `lun0` points to a 32 GiB disk with no filesystem |
-| The control plane has no data disk | `lun0` does not exist on cp-1 |
+| Each storage node has an empty 32 GiB disk at LUN 0 | The LUN 0 link points to a 32 GiB disk with no filesystem that is not the OS disk |
+| VMs that are not storage nodes have no data disk | The LUN 0 link does not exist on them (only applies to the production layout) |
 
 ### Results
 
@@ -228,13 +275,14 @@ Added after the first deployment.
 
 ## Cost
 
-Rough figures for West US 2, pay-as-you-go. Prices change, so check the Azure
-pricing calculator.
+Rough figures for South Africa North, pay-as-you-go rates. On the Free Trial
+this comes out of the trial credit. Prices change, so check the Azure pricing
+calculator.
 
 | | VMs running | VMs stopped |
 |---|---|---|
-| 3 × D4s_v5, 1 × D2s_v5, 1 × B1s | ~$0.70/hour | $0 |
-| NAT Gateway | ~$0.045/hour | ~$0.045/hour |
+| 3 × F1ams_v7, 1 × F1as_v7 (4 vCPUs in total) | ~$0.30/hour | $0 |
+| NAT Gateway | ~$0.05/hour | ~$0.05/hour |
 | Disks and public IPs | ~$2/day | ~$2/day |
 
 `terraform destroy` takes it to zero, and rebuilding takes about five minutes.

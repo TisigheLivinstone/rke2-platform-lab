@@ -15,7 +15,9 @@ all:
         ${name}:
           ansible_host: ${ip}
 %{ endfor ~}
-    # Workers that carry an empty data disk at LUN 0 for storage.
+    # VMs that carry an empty data disk at LUN 0 for cluster storage.
     storage_nodes:
-      children:
-        rke2_agents:
+      hosts:
+%{ for name in storage_nodes ~}
+        ${name}:
+%{ endfor ~}

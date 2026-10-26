@@ -27,7 +27,12 @@ You need an Azure subscription, the Azure CLI (logged in), Terraform and an SSH 
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars   # fill in your values
 terraform -chdir=terraform init
-terraform -chdir=terraform apply
+terraform -chdir=terraform apply -var-file=free-trial.tfvars
 bash tests/01-foundation.sh
-terraform -chdir=terraform destroy
+terraform -chdir=terraform destroy -var-file=free-trial.tfvars
 ```
+
+`free-trial.tfvars` fits the layout into the 4 vCPUs an Azure Free Trial allows
+per region (2 workers, 1 vCPU VMs). Without it you get the production layout:
+a dedicated control plane and 3 workers. The write-up explains why production
+needs at least three.

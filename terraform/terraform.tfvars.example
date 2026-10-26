@@ -1,10 +1,8 @@
 # Copy to terraform.tfvars and fill in. terraform.tfvars is git-ignored.
 
-subscription_id    = "00000000-0000-0000-0000-000000000000"
-admin_cidr         = "203.0.113.10/32" # your public IP: curl -s https://ifconfig.me
+subscription_id = "00000000-0000-0000-0000-000000000000"
+admin_cidr      = "203.0.113.10/32" # your public IP: curl -s https://ifconfig.me
 
-# Optional overrides
-# location           = "westus2"
-# worker_count       = 3
-# worker_vm_size     = "Standard_D4s_v5"
+# Optional
+# location           = "southafricanorth"
 # auto_shutdown_time = "2200"

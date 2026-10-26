@@ -6,7 +6,7 @@ variable "subscription_id" {
 variable "location" {
   description = "Azure region."
   type        = string
-  default     = "westus2"
+  default     = "southafricanorth"
 }
 
 variable "prefix" {
@@ -69,18 +69,35 @@ variable "worker_vm_size" {
 }
 
 variable "worker_count" {
-  description = "Number of workers. At least 3, so storage can keep 3 copies on 3 different machines."
+  description = "Number of workers. Use at least 3 in production (see docs/01-azure-foundation.md). 2 is allowed for small subscriptions, together with control_plane_data_disk = true."
   type        = number
   default     = 3
 
   validation {
-    condition     = var.worker_count >= 3
-    error_message = "worker_count must be at least 3."
+    condition     = var.worker_count >= 2
+    error_message = "worker_count must be at least 2."
+  }
+}
+
+variable "control_plane_data_disk" {
+  description = "Also give the control plane a data disk so it can act as a third storage node. Only for subscriptions too small for 3 workers; keep false in production."
+  type        = bool
+  default     = false
+}
+
+variable "disk_controller_type" {
+  description = "SCSI for v5 and older VM sizes, NVMe for v6/v7 sizes that only support NVMe."
+  type        = string
+  default     = "SCSI"
+
+  validation {
+    condition     = contains(["SCSI", "NVMe"], var.disk_controller_type)
+    error_message = "disk_controller_type must be SCSI or NVMe."
   }
 }
 
 variable "data_disk_size_gb" {
-  description = "Size of the empty data disk attached to each worker at LUN 0."
+  description = "Size of the empty data disk attached to each storage node at LUN 0."
   type        = number
   default     = 32
 }
