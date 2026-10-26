@@ -1,0 +1,20 @@
+# Managed by Ansible (roles/ssh_hardening)
+
+# Keys only, for one user, never root.
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+AllowUsers {{ ansible_user }}
+
+# Slow down guessing and drop dead sessions.
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Nothing gets forwarded unless this host's role needs it.
+X11Forwarding no
+AllowAgentForwarding no
+AllowTcpForwarding {{ ssh_allow_tcp_forwarding }}

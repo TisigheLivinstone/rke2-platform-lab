@@ -1,0 +1,9 @@
+# Validate before reloading, so a typo can never lock us out.
+- name: Check sshd config
+  ansible.builtin.command: sshd -t
+  changed_when: false
+
+- name: Reload ssh
+  ansible.builtin.service:
+    name: ssh
+    state: reloaded

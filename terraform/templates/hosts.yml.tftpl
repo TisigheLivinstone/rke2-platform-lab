@@ -3,18 +3,26 @@ all:
   vars:
     ansible_user: ${admin_username}
     ansible_ssh_private_key_file: ${private_key}
-    ansible_ssh_common_args: "-o ProxyCommand=\"ssh -i ${private_key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -W %h:%p ${admin_username}@${bastion_ip}\" -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=accept-new"
-    bastion_public_ip: ${bastion_ip}
   children:
-    rke2_servers:
+    bastion:
       hosts:
-        ${control_plane}:
-          ansible_host: ${control_plane_ip}
-    rke2_agents:
-      hosts:
+        ${bastion_name}:
+          ansible_host: ${bastion_ip}
+          ansible_ssh_common_args: "-o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=accept-new"
+    # Every VM in the private subnet. Ansible reaches them through the bastion.
+    cluster:
+      vars:
+        ansible_ssh_common_args: "-o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=accept-new -o ProxyCommand=\"ssh -i ${private_key} -o IdentitiesOnly=yes -o UserKnownHostsFile=${known_hosts} -o StrictHostKeyChecking=accept-new -W %h:%p ${admin_username}@${bastion_ip}\""
+      children:
+        control_plane:
+          hosts:
+            ${control_plane}:
+              ansible_host: ${control_plane_ip}
+        workers:
+          hosts:
 %{ for name, ip in workers ~}
-        ${name}:
-          ansible_host: ${ip}
+            ${name}:
+              ansible_host: ${ip}
 %{ endfor ~}
     # VMs that carry an empty data disk at LUN 0 for cluster storage.
     storage_nodes:

@@ -1,0 +1,75 @@
+# Reads the state of every VM and fails if any part of the baseline is missing.
+# Run by tests/02-automation.sh.
+
+- name: Verify the OS baseline
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Clock is synchronised by chrony
+      ansible.builtin.command: chronyc -n tracking
+      register: tracking
+      changed_when: false
+      failed_when: tracking.stdout is not search('Leap status\s*:\s*Normal')
+
+    - name: Timezone is set
+      ansible.builtin.command: timedatectl show -p Timezone --value
+      register: tz
+      changed_when: false
+      failed_when: tz.stdout != timezone
+
+    - name: Security updates run daily and never reboot on their own
+      ansible.builtin.command: apt-config dump
+      register: apt_config
+      changed_when: false
+      failed_when: >-
+        'APT::Periodic::Unattended-Upgrade "1";' not in apt_config.stdout
+        or 'Unattended-Upgrade::Automatic-Reboot "false";' not in apt_config.stdout
+
+    - name: No updates are waiting to be installed
+      ansible.builtin.shell: set -o pipefail; apt-get -s upgrade | grep -c '^Inst' || true
+      args:
+        executable: /bin/bash
+      register: pending
+      changed_when: false
+      failed_when: pending.stdout | int != 0
+
+    - name: No reboot is pending
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_flag
+      failed_when: reboot_flag.stat.exists
+
+    - name: Journal size is capped
+      ansible.builtin.command: systemd-analyze cat-config systemd/journald.conf
+      register: journald
+      changed_when: false
+      failed_when: ('SystemMaxUse=' ~ journald_max_use) not in journald.stdout
+
+    - name: Read the SSH settings sshd is actually using
+      ansible.builtin.command: sshd -T
+      register: sshd
+      changed_when: false
+
+    - name: SSH is hardened
+      ansible.builtin.assert:
+        that: item in sshd.stdout_lines
+        fail_msg: "sshd -T does not show '{{ item }}'"
+        quiet: true
+      loop:
+        - permitrootlogin no
+        - passwordauthentication no
+        - kbdinteractiveauthentication no
+        - authenticationmethods publickey
+        - "allowusers {{ ansible_user }}"
+        - x11forwarding no
+        - allowagentforwarding no
+        - "allowtcpforwarding {{ ssh_allow_tcp_forwarding }}"
+
+    - name: Cluster VMs find each other by name through Azure DNS
+      ansible.builtin.command: "getent hosts {{ item }}"
+      register: lookup
+      changed_when: false
+      failed_when: lookup.stdout.split() | first != hostvars[item].ansible_host
+      loop: "{{ groups['cluster'] }}"
+      when: inventory_hostname in groups['cluster']

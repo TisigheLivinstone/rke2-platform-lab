@@ -1,0 +1,16 @@
+# The OS baseline every VM gets, whatever runs on it later.
+# Cluster VMs first: the bastion is the way in to them, so it reboots last.
+
+- name: Baseline the cluster VMs
+  hosts: cluster
+  become: true
+  roles:
+    - baseline
+    - ssh_hardening
+
+- name: Baseline the bastion
+  hosts: bastion
+  become: true
+  roles:
+    - baseline
+    - ssh_hardening

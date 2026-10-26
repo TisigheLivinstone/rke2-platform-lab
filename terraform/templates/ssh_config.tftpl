@@ -6,7 +6,7 @@ Host *
   UserKnownHostsFile ${known_hosts}
   StrictHostKeyChecking accept-new
 
-Host bastion
+Host bastion ${bastion_name}
   HostName ${bastion_ip}
   User ${admin_username}
 

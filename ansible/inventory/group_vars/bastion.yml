@@ -1,0 +1,2 @@
+# The bastion forwards SSH connections to the private subnet (ssh -J / -W).
+ssh_allow_tcp_forwarding: local

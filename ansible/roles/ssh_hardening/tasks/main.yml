@@ -1,0 +1,11 @@
+# Ubuntu reads files in sshd_config.d before the main config, and the first
+# value sshd sees for a setting wins. A low number keeps these ahead of the
+# file cloud-init writes (50-cloud-init.conf).
+- name: Write SSH hardening settings
+  ansible.builtin.template:
+    src: 10-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    mode: "0644"
+  notify:
+    - Check sshd config
+    - Reload ssh

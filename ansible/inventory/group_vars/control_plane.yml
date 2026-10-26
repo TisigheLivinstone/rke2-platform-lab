@@ -1,0 +1,2 @@
+# The Kubernetes API will be reached through an SSH tunnel to this node.
+ssh_allow_tcp_forwarding: local

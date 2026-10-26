@@ -1,0 +1,71 @@
+- name: Wait for cloud-init to finish first boot
+  ansible.builtin.command: cloud-init status --wait
+  register: cloud_init
+  changed_when: false
+  failed_when: cloud_init.rc not in [0, 2] # 2 means it finished with warnings
+
+- name: Install all pending updates
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: safe
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name:
+      - chrony
+      - unattended-upgrades
+      - curl
+      - jq
+    state: present
+
+- name: Set the timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Keep chrony running
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Turn on daily security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+- name: Never reboot automatically after an update
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52-no-auto-reboot
+    mode: "0644"
+    content: |
+      Unattended-Upgrade::Automatic-Reboot "{{ unattended_upgrades_auto_reboot | string | lower }}";
+
+- name: Create the journald drop-in folder
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: "0755"
+
+- name: Limit journal size
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/10-size.conf
+    mode: "0644"
+    content: |
+      [Journal]
+      SystemMaxUse={{ journald_max_use }}
+  notify: Restart journald
+
+- name: Check whether an update needs a reboot
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+
+- name: Reboot if needed, one VM at a time
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+  throttle: 1
+  when: reboot_required.stat.exists

@@ -35,6 +35,7 @@ resource "local_file" "ansible_inventory" {
   file_permission = "0644"
   content = templatefile("${path.module}/templates/hosts.yml.tftpl", {
     admin_username   = var.admin_username
+    bastion_name     = azurerm_linux_virtual_machine.bastion.name
     bastion_ip       = azurerm_public_ip.bastion.ip_address
     control_plane    = azurerm_linux_virtual_machine.control_plane.name
     control_plane_ip = local.control_plane_ip
@@ -50,6 +51,7 @@ resource "local_file" "ssh_config" {
   file_permission = "0644"
   content = templatefile("${path.module}/templates/ssh_config.tftpl", {
     admin_username   = var.admin_username
+    bastion_name     = azurerm_linux_virtual_machine.bastion.name
     bastion_ip       = azurerm_public_ip.bastion.ip_address
     control_plane    = azurerm_linux_virtual_machine.control_plane.name
     control_plane_ip = local.control_plane_ip

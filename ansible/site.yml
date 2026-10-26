@@ -1,0 +1,3 @@
+# Everything Ansible manages, in order. Each part of the series adds a playbook here.
+- name: OS baseline
+  ansible.builtin.import_playbook: playbooks/baseline.yml

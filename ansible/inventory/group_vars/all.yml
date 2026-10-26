@@ -1,0 +1,13 @@
+# Settings shared by every VM.
+
+timezone: UTC
+
+# Keep the systemd journal from filling the 64 GiB OS disk.
+journald_max_use: 500M
+
+# Security updates install automatically, but nothing reboots on its own.
+# Reboots happen when Ansible runs, one VM at a time.
+unattended_upgrades_auto_reboot: false
+
+# SSH port forwarding is off unless a group turns it on.
+ssh_allow_tcp_forwarding: "no"
