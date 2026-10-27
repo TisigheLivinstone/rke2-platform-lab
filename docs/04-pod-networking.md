@@ -45,9 +45,7 @@ A simple example from the test app: `frontend` needs to fetch user data from
    This is service discovery.
 3. **kube-proxy:** its rules on worker-1 send traffic for the Service IP to one
    of the backend pod IPs.
-4. **Cilium on worker-1:** checks the egress policy. frontend may call backend
-   on 8080, so the packet goes on. The `intruder` pod stops here: no policy
-   lets it out, so Cilium drops its packet.
+4. **Cilium on worker-1 (CNI Plugin):** Enforces network policies and provides the network connectivity needed for packets to reach the selected backend pod, whether it's on the same node or a different node.
 5. **WireGuard:** the packet is leaving the VM, so it's encrypted on worker-1,
    crosses the Azure network, and is decrypted on worker-2.
 6. **Cilium on worker-2:** checks the ingress policy. backend only accepts
@@ -67,12 +65,6 @@ them, so the intruder's drop shows up with the policy that caused it.
 - Cilium can replace it with eBPF and do the Service load balancing itself.
   Step 3 then happens inside Cilium, and the rest of the flow stays the same.
   I leave that for later (see the decisions below).
-
-### Simple flow to remember
-
-frontend → CoreDNS (resolves the name) → Service IP → kube-proxy or Cilium
-(picks a backend pod) → Cilium policy check → WireGuard (between VMs) →
-Cilium policy check → backend pod.
 
 One important detail: CoreDNS only resolves the name. It doesn't forward the
 application traffic. The request itself goes from the frontend pod through the
