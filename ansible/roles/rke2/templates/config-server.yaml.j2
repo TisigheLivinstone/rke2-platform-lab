@@ -16,7 +16,14 @@ cni: cilium
 
 # Nothing is published to the internet yet, so no ingress controller.
 disable:
-  - rke2-ingress-nginx
+  - rke2-traefik
+
+# RKE2's default CPU reservations for the control plane add up to 1100m, more
+# than this 1 vCPU node has, which leaves no room for the Cilium install job.
+# These are reservations for scheduling, not limits: each component can still
+# use the whole vCPU when it's free. On a 2 vCPU control plane, keep the defaults.
+control-plane-resource-requests: >-
+  kube-apiserver-cpu=150m,etcd-cpu=100m,kube-controller-manager-cpu=100m,kube-scheduler-cpu=50m,kube-proxy-cpu=50m,cloud-controller-manager-cpu=50m
 
 # Keep application pods off the control plane. System add-ons tolerate this.
 node-taint:
