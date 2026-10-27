@@ -1,0 +1,74 @@
+# Installs RKE2 as a server (control plane) or an agent (worker).
+# Set rke2_type to "server" or "agent" when using the role.
+
+- name: Check whether RKE2 is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/rke2
+  register: rke2_binary
+
+- name: Download the RKE2 install script
+  ansible.builtin.get_url:
+    url: https://get.rke2.io
+    dest: /usr/local/sbin/rke2-install.sh
+    mode: "0750"
+  when: not rke2_binary.stat.exists
+
+# The script downloads the pinned release and checks it against the
+# published checksums before installing.
+- name: Install RKE2 {{ rke2_version }}
+  ansible.builtin.command: /usr/local/sbin/rke2-install.sh
+  environment:
+    INSTALL_RKE2_VERSION: "{{ rke2_version }}"
+    INSTALL_RKE2_TYPE: "{{ rke2_type }}"
+  args:
+    creates: /usr/local/bin/rke2
+
+# The CIS profile refuses to start unless the kernel is set up this way.
+- name: Apply the kernel settings the CIS profile requires
+  ansible.builtin.copy:
+    src: /usr/local/share/rke2/rke2-cis-sysctl.conf
+    dest: /etc/sysctl.d/60-rke2-cis.conf
+    remote_src: true
+    mode: "0644"
+  register: cis_sysctl
+
+- name: Load the new kernel settings
+  ansible.builtin.service:
+    name: systemd-sysctl
+    state: restarted
+  when: cis_sysctl is changed
+
+- name: Create the etcd system user the CIS profile expects
+  ansible.builtin.user:
+    name: etcd
+    system: true
+    shell: /sbin/nologin
+    create_home: false
+  when: rke2_type == 'server'
+
+- name: Create the RKE2 config folder
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0700"
+
+- name: Write the RKE2 config
+  ansible.builtin.template:
+    src: "config-{{ rke2_type }}.yaml.j2"
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  register: rke2_config
+
+# The first start can take several minutes: it pulls images and, on the
+# server, creates etcd and the certificates.
+- name: Start RKE2
+  ansible.builtin.service:
+    name: "rke2-{{ rke2_type }}"
+    state: started
+    enabled: true
+
+- name: Restart RKE2 if its config changed on an existing install
+  ansible.builtin.service:
+    name: "rke2-{{ rke2_type }}"
+    state: restarted
+  when: rke2_config is changed and rke2_binary.stat.exists

@@ -11,3 +11,14 @@ unattended_upgrades_auto_reboot: false
 
 # SSH port forwarding is off unless a group turns it on.
 ssh_allow_tcp_forwarding: "no"
+
+# Kubernetes (RKE2). Pinned so every rebuild gets the same cluster.
+rke2_version: v1.36.5+rke2r1
+rke2_server_ip: "{{ hostvars[groups['control_plane'][0]].ansible_host }}"
+
+# The join token is generated on first use and kept outside the repo,
+# in the home folder of whoever runs Ansible.
+rke2_token: "{{ lookup('ansible.builtin.password', lookup('ansible.builtin.env', 'HOME') + '/.rke2lab/rke2-token', chars=['ascii_letters', 'digits'], length=48) }}"
+
+# Where the admin kubeconfig is copied to on your machine (also outside the repo).
+kubeconfig_local_path: "{{ lookup('ansible.builtin.env', 'HOME') }}/.kube/rke2lab.yaml"

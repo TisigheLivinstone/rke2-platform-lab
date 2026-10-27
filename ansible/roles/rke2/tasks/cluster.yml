@@ -1,0 +1,43 @@
+# Runs on the control plane once every node has RKE2 installed.
+
+- name: Wait until every node reports Ready
+  ansible.builtin.command: "{{ rke2_kubectl }} get nodes --no-headers"
+  register: nodes
+  changed_when: false
+  retries: 60
+  delay: 10
+  until: >-
+    nodes.stdout_lines | length == groups['cluster'] | length
+    and nodes.stdout_lines | select('search', '^\S+\s+Ready\s') | list | length == groups['cluster'] | length
+
+- name: Label the workers so their role shows in kubectl get nodes
+  ansible.builtin.command: "{{ rke2_kubectl }} label node {{ item }} node-role.kubernetes.io/worker=true --overwrite"
+  loop: "{{ groups['workers'] }}"
+  register: label
+  changed_when: label.stdout is search('labeled$') and label.stdout is not search('not labeled')
+
+# The kubeconfig holds full admin credentials, so it goes to your home
+# folder, never into the repo. It points at https://127.0.0.1:6443, which
+# only answers while the SSH tunnel to the control plane is open.
+- name: Read the admin kubeconfig
+  ansible.builtin.slurp:
+    src: /etc/rancher/rke2/rke2.yaml
+  register: kubeconfig
+  no_log: true
+
+- name: Create the local .kube folder
+  ansible.builtin.file:
+    path: "{{ kubeconfig_local_path | dirname }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Save the kubeconfig on this machine
+  ansible.builtin.copy:
+    content: "{{ kubeconfig.content | b64decode }}"
+    dest: "{{ kubeconfig_local_path }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true

@@ -1,0 +1,26 @@
+# Kubernetes with RKE2: the control plane first, then the workers join it.
+
+- name: Install the RKE2 server on the control plane
+  hosts: control_plane
+  become: true
+  roles:
+    - role: rke2
+      vars:
+        rke2_type: server
+
+- name: Join the workers
+  hosts: workers
+  become: true
+  roles:
+    - role: rke2
+      vars:
+        rke2_type: agent
+
+- name: Finish the cluster and fetch the kubeconfig
+  hosts: control_plane
+  become: true
+  tasks:
+    - name: Wait for the nodes, label the workers, copy the kubeconfig
+      ansible.builtin.include_role:
+        name: rke2
+        tasks_from: cluster

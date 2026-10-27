@@ -1,0 +1,27 @@
+# Managed by Ansible (roles/rke2)
+token: {{ rke2_token }}
+node-ip: {{ ansible_host }}
+advertise-address: {{ ansible_host }}
+tls-san:
+  - {{ ansible_host }}
+  - {{ inventory_hostname }}
+write-kubeconfig-mode: "0600"
+
+# CIS Kubernetes Benchmark hardening: Pod Security "restricted" by default,
+# audit logging, and protected kernel settings.
+profile: cis
+
+# Pod networking. RKE2 ships Cilium; Part 4 configures it further.
+cni: cilium
+
+# Nothing is published to the internet yet, so no ingress controller.
+disable:
+  - rke2-ingress-nginx
+
+# Keep application pods off the control plane. System add-ons tolerate this.
+node-taint:
+  - "CriticalAddonsOnly=true:NoExecute"
+
+# etcd snapshots on the node every 6 hours. Part 7 copies them off the VM.
+etcd-snapshot-schedule-cron: "0 */6 * * *"
+etcd-snapshot-retention: 10
