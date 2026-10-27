@@ -23,6 +23,14 @@
   community.general.timezone:
     name: "{{ timezone }}"
 
+# Without this line Ubuntu answers lookups of its own name with an IPv6
+# link-local address. Other VMs are still found through Azure DNS.
+- name: Resolve this VM's own name to its private IP
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '\s{{ inventory_hostname }}$'
+    line: "{{ ansible_facts['default_ipv4']['address'] }} {{ inventory_hostname }}"
+
 - name: Keep chrony running
   ansible.builtin.service:
     name: chrony
