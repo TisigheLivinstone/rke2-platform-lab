@@ -277,6 +277,50 @@ other across VMs, a privileged pod is rejected, an etcd snapshot works, and a
 second run of the playbook changes nothing. Removes its test app at the end.
 Expect `16 passed, 0 failed`.
 
+## 6. Part 4: Pod networking with Cilium
+
+### Configure Cilium
+
+```bash
+cd ansible
+ansible-playbook playbooks/networking.yml
+cd ..
+```
+
+Writes the Cilium settings (WireGuard, Hubble, Relay and UI) into the folder
+RKE2 watches on cp-1. RKE2 re-applies its Cilium chart with them, and the
+Cilium agent restarts one node at a time. The playbook waits until Hubble Relay
+is running and every node reports WireGuard. About 5 minutes.
+
+### Test
+
+```bash
+bash tests/04-networking.sh
+```
+
+Opens its own tunnel, then checks Cilium is healthy on every node, WireGuard is
+on with the other two nodes as peers, and the policies in a demo namespace
+allow only frontend to backend. Checks Hubble recorded the intruder's blocked
+attempt, and that a second run of the playbook changes nothing. Removes the
+demo namespaces at the end. Expect `10 passed, 0 failed`.
+
+```bash
+bash tests/03-kubernetes.sh
+```
+
+The Part 3 tests again, to make sure the new network settings broke nothing.
+Expect `16 passed, 0 failed`.
+
+### Open the Hubble UI
+
+```bash
+kubectl -n kube-system port-forward svc/hubble-ui 12000:80
+```
+
+With the tunnel from Part 3 running, forwards port 12000 on your machine to the
+Hubble UI. Browse to http://localhost:12000 and pick a namespace to see its
+flows. Stop it with Ctrl+C.
+
 ## Day to day
 
 ```bash
@@ -303,7 +347,7 @@ terraform -chdir=terraform destroy -var-file=free-trial.tfvars
 ```
 
 Deletes everything this lab created in Azure. Costs drop to zero. Sections 3 to
-5 rebuild it in about 30 minutes.
+6 rebuild it in about 35 minutes.
 
 ## Troubleshooting
 
@@ -316,3 +360,4 @@ Problems I actually hit, and the fix for each.
 | `UNPROTECTED PRIVATE KEY FILE`, or Ansible ignores `ansible.cfg` | C: drive mounted without Linux permissions | The `/etc/wsl.conf` change in section 1, then `wsl --shutdown` |
 | `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | Free Trial allows 4 vCPUs per region | Use `free-trial.tfvars`, and a region with nothing else running in it |
 | Nodes stay `NotReady`; `helm-install-rke2-cilium` shows `UnexpectedAdmissionError` | The control plane's default CPU reservations fill the 1 vCPU cp-1, so the Cilium install job can't be placed | `control-plane-resource-requests` in the server config (already set) |
+| `Wait for WireGuard to be active` retries and fails, yet `cilium-dbg encrypt status` shows WireGuard on every node | The check piped kubectl into `grep -q` under `set -o pipefail`. grep exits at the first match, kubectl gets a broken pipe (exit 141), and pipefail reports a failure | Capture the output first, then grep it (already fixed in the role and the test) |

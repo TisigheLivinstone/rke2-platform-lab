@@ -24,11 +24,14 @@
   register: agents
   until: agents.rc == 0
 
+# The status is captured before grep: piping into grep -q under pipefail fails
+# with a broken pipe as soon as grep finds the match.
 - name: Wait for WireGuard to be active on every node
   ansible.builtin.shell: |
-    set -o pipefail
-    for pod in $({{ cilium_kubectl }} -n kube-system get pods -l k8s-app=cilium -o name); do
-      {{ cilium_kubectl }} -n kube-system exec "$pod" -c cilium-agent -- cilium-dbg encrypt status | grep -q 'Encryption: Wireguard' || exit 1
+    pods=$({{ cilium_kubectl }} -n kube-system get pods -l k8s-app=cilium -o name) || exit 1
+    for pod in $pods; do
+      status=$({{ cilium_kubectl }} -n kube-system exec "$pod" -c cilium-agent -- cilium-dbg encrypt status) || exit 1
+      grep -q 'Encryption: Wireguard' <<< "$status" || exit 1
     done
   args:
     executable: /bin/bash

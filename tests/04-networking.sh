@@ -27,7 +27,8 @@ nodes=$($K get nodes --no-headers | wc -l)
 echo "Cilium"
 healthy=0
 for a in $agents; do
-  $K -n kube-system exec "$a" -c cilium-agent -- cilium-dbg status --brief 2>/dev/null | grep -q '^OK$' && healthy=$((healthy + 1))
+  status=$($K -n kube-system exec "$a" -c cilium-agent -- cilium-dbg status --brief 2>/dev/null)
+  grep -q '^OK$' <<< "$status" && healthy=$((healthy + 1))
 done
 if [ "$healthy" -eq "$nodes" ]; then ok "Cilium agent healthy on $healthy of $nodes nodes"; else bad "Cilium agent healthy on $healthy of $nodes nodes"; fi
 if $K -n kube-system rollout status deploy/hubble-relay --timeout=60s >/dev/null 2>&1; then ok "Hubble Relay is running"; else bad "Hubble Relay is not ready"; fi
@@ -37,7 +38,7 @@ echo "Encryption between nodes"
 encrypted=0
 for a in $agents; do
   status=$($K -n kube-system exec "$a" -c cilium-agent -- cilium-dbg encrypt status 2>/dev/null)
-  echo "$status" | grep -q 'Encryption: Wireguard' && echo "$status" | grep -q "Peers: $((nodes - 1))" && encrypted=$((encrypted + 1))
+  grep -q 'Encryption: Wireguard' <<< "$status" && grep -q "Number of peers: $((nodes - 1))" <<< "$status" && encrypted=$((encrypted + 1))
 done
 if [ "$encrypted" -eq "$nodes" ]; then ok "WireGuard on every node, each with $((nodes - 1)) peers"; else bad "WireGuard fully set up on $encrypted of $nodes nodes"; fi
 
@@ -48,14 +49,16 @@ $K apply -n netpol-demo -f kubernetes/network-policies/default-deny.yaml >/dev/n
 $K -n netpol-demo rollout status deploy/backend --timeout=180s >/dev/null 2>&1
 $K -n netpol-demo wait --for=condition=Ready pod/frontend pod/intruder --timeout=180s >/dev/null 2>&1
 $K -n netpol-outside wait --for=condition=Ready pod/outsider --timeout=180s >/dev/null 2>&1
-try() { $K -n "$1" exec "$2" -- wget -qO- -T 5 "$3" 2>/dev/null | grep -qi "$4"; }
+# Output is captured before grep: piping into grep -q under pipefail can fail
+# with a broken pipe even when the match is found.
+try() { local out; out=$($K -n "$1" exec "$2" -- wget -qO- -T 5 "$3" 2>/dev/null); grep -qi "$4" <<< "$out"; }
 
 if try netpol-demo frontend http://backend nginx; then ok "frontend reaches backend (the one allowed connection)"; else bad "frontend cannot reach backend"; fi
 if $K -n netpol-demo exec intruder -- nslookup kubernetes.default.svc.cluster.local >/dev/null 2>&1; then ok "DNS still works under default deny"; else bad "DNS lookups are blocked"; fi
 if try netpol-demo intruder http://backend nginx; then bad "intruder reached backend"; else ok "intruder in the same namespace cannot reach backend"; fi
 if try netpol-outside outsider http://backend.netpol-demo nginx; then bad "a pod in another namespace reached backend"; else ok "a pod in another namespace cannot reach backend"; fi
 if try netpol-outside outsider http://example.com 'example domain'; then
-  if $K -n netpol-demo exec deploy/backend -- wget -qO- -T 5 http://example.com 2>/dev/null | grep -qi 'example domain'; then
+  if try netpol-demo deploy/backend http://example.com 'example domain'; then
     bad "backend reached the internet"
   else
     ok "backend cannot reach the internet (a pod without policies can)"

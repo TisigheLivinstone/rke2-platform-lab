@@ -14,7 +14,7 @@ explains what problem the layer solves and why I chose it over the alternatives.
 | 1 | [Azure foundation](docs/01-azure-foundation.md): private network, bastion, NAT Gateway, VMs | Deployed and tested |
 | 2 | [Configuration management](docs/02-configuration-management.md): Ansible OS baseline for every VM | Deployed and tested |
 | 3 | [Kubernetes with RKE2](docs/03-kubernetes.md): CIS-hardened cluster, API through an SSH tunnel | Deployed and tested |
-| 4 | [Pod networking with Cilium](docs/04-pod-networking.md): WireGuard between nodes, default-deny policies, Hubble | In progress |
+| 4 | [Pod networking with Cilium](docs/04-pod-networking.md): WireGuard between nodes, default-deny policies, Hubble | Deployed and tested |
 | 5 | Storage with Rook-Ceph | |
 | 6 | Monitoring | |
 | 7 | Backups and recovery | |
@@ -33,6 +33,8 @@ cd ansible && ansible-playbook playbooks/baseline.yml && cd ..     # Part 2
 bash tests/02-automation.sh
 cd ansible && ansible-playbook playbooks/kubernetes.yml && cd ..   # Part 3
 bash tests/03-kubernetes.sh
+cd ansible && ansible-playbook playbooks/networking.yml && cd ..   # Part 4
+bash tests/04-networking.sh
 ```
 
 `ansible-playbook site.yml` runs every Ansible part in order.
