@@ -4,27 +4,6 @@ How to rebuild the lab by hand, from a blank Windows machine to a deployed and
 tested platform. Each command is followed by what it does. Each part of the
 series adds its steps here.
 
-## Prerequisites
-
-| What | Why it's needed |
-|---|---|
-| An Azure subscription | Where everything runs. A Free Trial works, with the trial sizes. |
-| Windows 10 or 11 with WSL | Ansible doesn't run on Windows, so the tools run in Ubuntu inside WSL |
-| About 8 GB of RAM on the laptop | WSL, Terraform and Ansible are light, but the laptop also runs Windows |
-| Internet access from home | Terraform and the Azure CLI talk to Azure; you SSH to the bastion |
-| A GitHub account (optional) | Only to fork the repo instead of cloning it |
-
-Tools, all installed in the steps below:
-
-| Tool | Version used | Used for |
-|---|---|---|
-| Ubuntu (WSL) | 26.04 | The Linux machine everything runs from |
-| Terraform | 1.15.8 | Creates the Azure resources (Part 1) |
-| Ansible | core 2.20 | Configures the VMs (Part 2 onwards) |
-| Azure CLI | 2.x | Logs Terraform in to Azure; starts and stops the VMs |
-| OpenSSH | from Ubuntu | Connects to the VMs through the bastion |
-| git | from Ubuntu | Gets the code |
-
 ## 1. One-time setup
 
 ### Install WSL
@@ -274,7 +253,4 @@ Problems I actually hit, and the fix for each.
 | SSH to the bastion times out after working before | Your home IP changed, and the NSG only allows the old one | Update `admin_cidr` in `terraform.tfvars`, run `terraform apply` again |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` after a rebuild | New VMs, same private IPs | `terraform apply` resets the lab's `known_hosts` file; or delete `known_hosts` in the repo root |
 | `UNPROTECTED PRIVATE KEY FILE`, or Ansible ignores `ansible.cfg` | C: drive mounted without Linux permissions | The `/etc/wsl.conf` change in section 1, then `wsl --shutdown` |
-| Your password is shown as you type it | `sudo` started through `wsl -e` from PowerShell | Run `sudo` commands in the Ubuntu window instead |
 | `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | Free Trial allows 4 vCPUs per region | Use `free-trial.tfvars`, and a region with nothing else running in it |
-| `SkuNotAvailable` for a VM size | That size isn't offered to your subscription in that region | `az vm list-skus -l <region> --size <size> -o table`, then pick another size or region |
-| A test reports a problem but lists nothing after it | The Windows `az` prints blank Windows lines when called from WSL | Already handled in the tests; if you write a new check, strip whitespace from `az` output |
