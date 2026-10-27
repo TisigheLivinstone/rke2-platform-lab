@@ -19,56 +19,64 @@ seen.**
 
 ## Remember these components
 
-| Component | In one line |
-|---|---|
-| Pod | Runs the app. Gets its own IP, which changes when the pod is replaced |
-| Service | One stable name and IP (the ClusterIP) in front of a group of pods |
-| CoreDNS | Turns a Service name like `backend` into its Service IP. It answers the question, it doesn't carry the traffic |
-| kube-proxy | Rules on every node that turn the Service IP into one real pod IP |
-| Cilium | The network plugin (CNI). Gives pods their IPs, moves packets between them and enforces policies, with eBPF programs in the kernel |
-| NetworkPolicy | The rules for who may talk to whom. Cilium reads them and drops everything else |
-| WireGuard | Encrypts pod traffic when it leaves one VM for another. Cilium sets it up and handles the keys |
-| Hubble | Cilium's flow log: every connection, with forwarded or dropped, and why |
-| Hubble Relay | Collects the flows from the Cilium agent on every node into one place |
-| Hubble UI | Draws those flows as a map in the browser |
+| Component | What it does | What I use for it here |
+|---|---|---|
+| Pod | Runs the app. Gets its own IP, which changes when the pod is recreated | `frontend`, `backend` and `intruder` in the test app |
+| Service | One stable name and IP (the ClusterIP) in front of a group of pods | `backend`, in front of the backend pods |
+| CoreDNS | Turns a Service name into its Service IP (service discovery) | Comes with RKE2 |
+| kube-proxy | Rules on every node that send traffic for a Service IP to one of its pods | Comes with RKE2, kept for now |
+| CNI plugin | Gives pods their IPs and carries packets between them, on the same node or across nodes | Cilium, with eBPF programs in the Linux kernel |
+| NetworkPolicy | The rules for which pods may talk to which | Deny by default, then one rule per allowed connection. Cilium enforces them |
+| WireGuard | Encrypts traffic between two machines | Cilium's encryption between nodes (`cilium_wg0`, UDP 51871) |
+| Hubble | Records every connection, forwarded or dropped, and why | Built into the Cilium agent on every node |
+| Hubble Relay | Collects the flows from every node into one place | Runs on a worker |
+| Hubble UI | Shows the flows as a map in the browser | Opened with `kubectl port-forward` through the SSH tunnel |
 
-## How a request travels
+![How a request travels](architecture/request-flow.drawio.png)
 
-The diagram follows one request in the test app: `frontend` on worker-1 calls
-`http://backend`, which runs on worker-2.
+### How the communication works
 
-1. **frontend asks CoreDNS for `backend`.** CoreDNS answers with the Service
-   IP. That's all it does; the request itself never goes through CoreDNS.
-2. **kube-proxy turns the Service IP into a pod IP.** frontend sends the
-   request to the Service IP, and kube-proxy's rules on worker-1 rewrite it to
-   the IP of the backend pod.
-3. **Cilium on worker-1 checks the egress policy.** frontend is allowed to call
-   backend on 8080, so Cilium sends the packet on towards worker-2.
-4. **WireGuard encrypts it between the VMs.** The packet leaves worker-1
-   through `cilium_wg0`, crosses the Azure network encrypted, and is decrypted
-   on worker-2.
-5. **Cilium on worker-2 checks the ingress policy and delivers it.** backend
-   only accepts traffic from frontend, so the packet reaches the backend pod.
+A simple example from the test app: `frontend` needs to fetch user data from
+`backend`, and the two pods sit on different workers.
 
-The `intruder` pod tries the same thing and is stopped at step 3: no policy
-lets it out, so Cilium drops the packet on worker-1 and it never reaches the
-network.
+1. **frontend pod:** calls `http://backend` instead of a hardcoded IP, because
+   pod IPs change whenever pods are recreated.
+2. **CoreDNS:** resolves `backend` to the Service's stable IP (the ClusterIP).
+   This is service discovery.
+3. **kube-proxy:** its rules on worker-1 send traffic for the Service IP to one
+   of the backend pod IPs.
+4. **Cilium on worker-1:** checks the egress policy. frontend may call backend
+   on 8080, so the packet goes on. The `intruder` pod stops here: no policy
+   lets it out, so Cilium drops its packet.
+5. **WireGuard:** the packet is leaving the VM, so it's encrypted on worker-1,
+   crosses the Azure network, and is decrypted on worker-2.
+6. **Cilium on worker-2:** checks the ingress policy. backend only accepts
+   traffic from frontend, so the packet is delivered.
+7. **backend pod:** receives the request, processes it and sends the response
+   back to frontend the same way.
 
-At every step, the Cilium agent on that node reports the flow to Hubble Relay,
-and the Hubble UI shows it. That's how a drop shows up with the policy that
-caused it.
+At every step, the Cilium agent on that node hands the flow to **Hubble**.
+**Hubble Relay** collects the flows from all nodes and the **Hubble UI** shows
+them, so the intruder's drop shows up with the policy that caused it.
 
-Simple flow to remember:
+### What if kube-proxy is not used?
 
-```
-frontend → CoreDNS (name to Service IP)
-frontend → Service IP → kube-proxy (pick a pod) → Cilium (policy)
-         → WireGuard (between VMs) → Cilium (policy) → backend
-```
+- kube-proxy is what normally turns a Service IP into a pod IP, using rules on
+  each node.
+- If kube-proxy isn't there, something else has to do that job.
+- Cilium can replace it with eBPF and do the Service load balancing itself.
+  Step 3 then happens inside Cilium, and the rest of the flow stays the same.
+  I leave that for later (see the decisions below).
 
-Without kube-proxy, Cilium does step 2 itself with eBPF, before the packet
-leaves the pod. The rest of the flow stays the same. That's the kube-proxy
-replacement I leave for later (see below).
+### Simple flow to remember
+
+frontend → CoreDNS (resolves the name) → Service IP → kube-proxy or Cilium
+(picks a backend pod) → Cilium policy check → WireGuard (between VMs) →
+Cilium policy check → backend pod.
+
+One important detail: CoreDNS only resolves the name. It doesn't forward the
+application traffic. The request itself goes from the frontend pod through the
+node's networking to the backend pod.
 
 ## What gets built
 
