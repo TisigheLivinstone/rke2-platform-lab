@@ -1,0 +1,32 @@
+# Managed by Ansible (roles/cilium).
+# RKE2 installs Cilium from its own Helm chart and watches this folder: when this
+# file changes, it re-applies the chart with these values on top of its defaults.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: rke2-cilium
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # Encrypt pod traffic between nodes. Cilium creates and rotates the
+    # WireGuard keys itself; applications don't notice.
+    encryption:
+      enabled: true
+      type: wireguard
+
+    # Hubble records every flow between pods: who talked to whom, allowed or
+    # dropped, and why. Relay collects it from all nodes; the UI shows it.
+    hubble:
+      enabled: true
+      relay:
+        enabled: true
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+      ui:
+        enabled: true
+        frontend:
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+        backend:
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }

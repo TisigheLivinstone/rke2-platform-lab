@@ -4,3 +4,6 @@
 
 - name: Kubernetes
   ansible.builtin.import_playbook: playbooks/kubernetes.yml
+
+- name: Pod networking
+  ansible.builtin.import_playbook: playbooks/networking.yml

@@ -1,0 +1,6 @@
+# Pod networking: Cilium with WireGuard encryption and Hubble.
+- name: Configure Cilium
+  hosts: control_plane
+  become: true
+  roles:
+    - cilium

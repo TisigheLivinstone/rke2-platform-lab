@@ -1,0 +1,39 @@
+# Configures RKE2's built-in Cilium. Runs on the control plane.
+
+- name: Write the Cilium settings where RKE2 picks them up
+  ansible.builtin.template:
+    src: rke2-cilium-config.yaml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/rke2-cilium-config.yaml
+    mode: "0600"
+
+# RKE2 re-applies the chart in the background and Cilium restarts node by node.
+# These waits make the playbook finish only once the new settings are live.
+- name: Wait for Hubble Relay to be running
+  ansible.builtin.command: "{{ cilium_kubectl }} -n kube-system rollout status deployment/hubble-relay --timeout=30s"
+  register: relay
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: relay.rc == 0
+
+- name: Wait for the Cilium agent to be updated on every node
+  ansible.builtin.command: "{{ cilium_kubectl }} -n kube-system rollout status daemonset/cilium --timeout=60s"
+  changed_when: false
+  retries: 15
+  delay: 10
+  register: agents
+  until: agents.rc == 0
+
+- name: Wait for WireGuard to be active on every node
+  ansible.builtin.shell: |
+    set -o pipefail
+    for pod in $({{ cilium_kubectl }} -n kube-system get pods -l k8s-app=cilium -o name); do
+      {{ cilium_kubectl }} -n kube-system exec "$pod" -c cilium-agent -- cilium-dbg encrypt status | grep -q 'Encryption: Wireguard' || exit 1
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+  retries: 15
+  delay: 10
+  register: wireguard
+  until: wireguard.rc == 0
