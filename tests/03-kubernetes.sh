@@ -45,13 +45,21 @@ else
 fi
 
 echo
-echo "System pods"
+echo "System components"
+# Look at what each component should be doing, not at raw pod status: a job
+# that needed a retry leaves its failed attempt behind even when it succeeded.
+cp_running=$($K -n kube-system get pods --no-headers | grep -E '^(etcd|kube-apiserver|kube-scheduler|kube-controller-manager)-' | awk '$3 == "Running"' | wc -l)
+if [ "$cp_running" -eq 4 ]; then ok "etcd, API server, scheduler and controller manager are Running"; else bad "only $cp_running of 4 control plane components Running"; fi
 for i in $(seq 1 30); do
-  not_ready=$($K get pods -n kube-system --no-headers | grep -Ev 'Running|Completed' | wc -l)
-  [ "$not_ready" -eq 0 ] && break
+  short=$( { $K -n kube-system get deploy -o jsonpath='{range .items[*]}{.metadata.name} {.status.readyReplicas} {.spec.replicas}{"\n"}{end}';
+             $K -n kube-system get ds -o jsonpath='{range .items[*]}{.metadata.name} {.status.numberReady} {.status.desiredNumberScheduled}{"\n"}{end}'; } \
+           | awk '$2 != $3 {print $1}')
+  [ -z "$short" ] && break
   sleep 10
 done
-if [ "$not_ready" -eq 0 ]; then ok "every kube-system pod is Running or Completed"; else bad "$not_ready kube-system pods not running"; $K get pods -n kube-system | grep -Ev 'Running|Completed'; fi
+if [ -z "$short" ]; then ok "every Deployment and DaemonSet in kube-system has all replicas ready"; else bad "not fully ready: $(echo $short)"; fi
+unfinished=$($K -n kube-system get jobs -o jsonpath='{range .items[*]}{.metadata.name} {.status.succeeded}{"\n"}{end}' | awk '$2 < 1 {print $1}')
+if [ -z "$unfinished" ]; then ok "every RKE2 install job has completed"; else bad "jobs not completed: $(echo $unfinished)"; fi
 
 echo
 echo "An application runs, on the workers only"
