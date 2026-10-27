@@ -5,7 +5,7 @@ with monitoring, backups and GitOps on top. I build it one layer at a time.
 Each layer is deployed and tested before the next one starts, and each write-up
 explains what problem the layer solves and why I chose it over the alternatives.
 
-![Azure foundation: network and compute](docs/architecture/azure-foundation.drawio.png)
+![The platform so far: Azure network, RKE2 and Cilium with WireGuard and Hubble](docs/architecture/pod-networking.drawio.png)
 
 ## Parts
 
