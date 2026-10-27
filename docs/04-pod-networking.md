@@ -159,9 +159,16 @@ Policies for real applications come with the applications themselves in Part 8.
 - **It's safe to run again.** A second run of the networking playbook changes
   nothing.
 
+The first run of the playbook failed its own WireGuard check, even though
+WireGuard was on everywhere. The check piped kubectl into `grep -q`, and with
+`pipefail` the broken pipe counted as a failure. After the fix, all 10 checks
+passed.
+
 ```bash
 bash tests/04-networking.sh
 ```
+
+![Part 4 test output with all 10 checks passing](04-networking-tests.png)
 
 ## What the next part needs from this one
 
@@ -195,3 +202,5 @@ kubectl -n kube-system port-forward svc/hubble-ui 12000:80
 ```
 
 Then browse to http://localhost:12000.
+
+![Hubble UI showing frontend to backend forwarded and the intruder dropped](04-hubble-ui.png)
