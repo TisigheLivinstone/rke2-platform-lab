@@ -47,11 +47,7 @@ from the internet can start a connection to the private subnet: there is no
 public IP there and no rule that would allow it. The Kubernetes API port (6443)
 is not opened anywhere.
 
-<!-- SCREENSHOT
-Everything above sits in one resource group, which is also what makes cleanup a single command.
-Capture: Azure portal > Resource groups > rke2lab-rg > Overview, with the full resource list visible.
-Blur: subscription ID.
--->
+![Resource group rke2lab-rg and its resources in South Africa North](01-resource-group.png)
 
 ## Decisions
 
@@ -73,12 +69,6 @@ If the bastion and the cluster shared a subnet, anyone who broke into the
 bastion would already be next to the nodes. With separate subnets, the bastion
 sits outside the cluster's firewall and can only reach it on port 22.
 
-<!-- SCREENSHOT
-In the portal the two subnets show up side by side, each with its own NSG, and only the private one has the NAT Gateway attached.
-Capture: Virtual networks > rke2lab-vnet > Subnets (columns: name, address range, NSG, NAT gateway).
-Blur: subscription ID.
--->
-
 ### NAT Gateway
 
 One thing that differs from AWS: there, a NAT Gateway sits inside a public
@@ -86,11 +76,7 @@ subnet. In Azure it is not inside any subnet. It is its own resource with its
 own public IP, attached to the subnets it serves. That is why the diagram shows
 it outside both subnets, with an arrow from the private subnet.
 
-<!-- SCREENSHOT
-The NAT Gateway lists the private subnet as the only subnet it serves, and one outbound public IP.
-Capture: NAT gateways > rke2lab-natgw > Subnets, then Outbound IP (two screenshots, or one if both fit).
-Blur: subscription ID.
--->
+![NAT Gateway rke2lab-natgw serving one subnet of rke2lab-vnet with one public IP](01-nat-gateway.png)
 
 ### Two workers here, at least three in production
 
@@ -120,7 +106,6 @@ control plane free of storage and application work:
 
 Moving to the production layout is a variable change, not a redesign:
 `worker_count = 3` and `control_plane_data_disk = false` (both defaults).
-
 
 
 ### Premium SSD
