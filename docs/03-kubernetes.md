@@ -43,6 +43,11 @@ joins the server on port 9345 with a shared token.
 | Role `rke2` | `ansible/roles/rke2/` | Installs the server, then joins the agents, waits for all nodes to be Ready, labels the workers and copies the kubeconfig |
 | SSH tunnel | laptop to cp-1 | `kubectl` reaches the API on `127.0.0.1:6443` without the port ever being opened |
 
+<!-- SCREENSHOT
+From my laptop, through the tunnel: three nodes Ready on v1.36.5, each with its private IP.
+![kubectl get nodes showing three Ready nodes on RKE2 v1.36.5](03-nodes.png)
+-->
+
 ## Decisions
 
 ### RKE2 instead of kubeadm, k3s or AKS
@@ -69,6 +74,11 @@ it on now means everything I add from here has to be written to run safely,
 including the test app in this part. The few platform pieces that genuinely
 need host access (storage in Part 5) will get an explicit, documented exception
 on their own namespace.
+
+<!-- SCREENSHOT
+This is what the profile does with a pod that asks for full access to the host: the API refuses it before it ever runs.
+![A privileged pod rejected for violating the restricted Pod Security policy](03-cis-rejection.png)
+-->
 
 ### Application pods stay off the control plane
 
@@ -161,6 +171,10 @@ asks what each component should be doing instead.
 ```bash
 bash tests/03-kubernetes.sh
 ```
+
+<!-- SCREENSHOT
+![Part 3 test output with all 16 checks passing](03-tests.png)
+-->
 
 ## What the next part needs from this one
 

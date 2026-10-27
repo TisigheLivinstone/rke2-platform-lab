@@ -166,7 +166,7 @@ bash tests/02-automation.sh
 ```
 
 <!-- SCREENSHOT
-The second run of the playbook, finishing with changed=0 on every VM.
-Capture: the terminal after bash tests/02-automation.sh, showing the PLAY RECAP of the second run and the PASS lines.
-Blur: bastion public IP.
+The test run: changed=0 on every VM and all 8 checks passing.
+![Part 2 test output with changed=0 on every VM and 8 checks passing](02-ansible-tests.png)
 -->
+
