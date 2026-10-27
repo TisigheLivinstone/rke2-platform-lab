@@ -41,10 +41,11 @@ echo
 echo "No inbound path to the cluster"
 if command -v az >/dev/null; then
   # Every public IP in the resource group must belong to the bastion or the NAT Gateway.
-  others=$(az network public-ip list -g "$RG" --query "[?!(contains(name, 'bastion') || contains(name, 'nat'))].name" -o tsv)
+  # tr strips blank lines, including the carriage returns the Windows az CLI prints under WSL.
+  others=$(az network public-ip list -g "$RG" --query "[?!(contains(name, 'bastion') || contains(name, 'nat'))].name" -o tsv | tr -d '[:space:]')
   if [ -z "$others" ]; then ok "only the bastion and NAT have public IPs"; else bad "unexpected public IPs: $others"; fi
   # The API port must not be open in any NSG rule.
-  open6443=$(az network nsg list -g "$RG" --query "[].securityRules[?contains(destinationPortRange || '', '6443') || contains(join(',', destinationPortRanges), '6443')].name" -o tsv)
+  open6443=$(az network nsg list -g "$RG" --query "[].securityRules[?contains(destinationPortRange || '', '6443') || contains(join(',', destinationPortRanges), '6443')].name" -o tsv | tr -d '[:space:]')
   if [ -z "$open6443" ]; then ok "no NSG rule opens port 6443"; else bad "port 6443 opened by: $open6443"; fi
 else
   echo "  SKIP  az CLI not found, skipping public IP and NSG checks"
