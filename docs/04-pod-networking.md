@@ -17,27 +17,58 @@ The problem for this part: **pods only reach what they're meant to, traffic
 between nodes is encrypted, and every connection, allowed or blocked, can be
 seen.**
 
-## How pod networking works here
+## Remember these components
 
-Two pieces move traffic, and Part 4 doesn't change that split:
+| Component | In one line |
+|---|---|
+| Pod | Runs the app. Gets its own IP, which changes when the pod is replaced |
+| Service | One stable name and IP (the ClusterIP) in front of a group of pods |
+| CoreDNS | Turns a Service name like `backend` into its Service IP. It answers the question, it doesn't carry the traffic |
+| kube-proxy | Rules on every node that turn the Service IP into one real pod IP |
+| Cilium | The network plugin (CNI). Gives pods their IPs, moves packets between them and enforces policies, with eBPF programs in the kernel |
+| NetworkPolicy | The rules for who may talk to whom. Cilium reads them and drops everything else |
+| WireGuard | Encrypts pod traffic when it leaves one VM for another. Cilium sets it up and handles the keys |
+| Hubble | Cilium's flow log: every connection, with forwarded or dropped, and why |
+| Hubble Relay | Collects the flows from the Cilium agent on every node into one place |
+| Hubble UI | Draws those flows as a map in the browser |
 
-- **Cilium** gives every pod an IP address and carries packets between pods,
-  across VMs inside a VXLAN tunnel. It also enforces network policies, using
-  eBPF programs in the Linux kernel.
-- **kube-proxy** handles Services. A Service is one stable address in front of
-  a group of pods; kube-proxy writes the rules on each node that turn "traffic
-  to the Service" into "traffic to one of its pods". Cilium then carries it.
+## How a request travels
 
-What this part adds on top:
+The diagram follows one request in the test app: `frontend` on worker-1 calls
+`http://backend`, which runs on worker-2.
 
-- **NetworkPolicy** objects describe which pods may talk to which. Cilium reads
-  them and drops anything they don't allow, at the source or the destination.
-- **WireGuard** encryption, which Cilium sets up between nodes. Each node gets
-  a key pair that Cilium creates and rotates; the VXLAN traffic between nodes
-  travels inside it. Applications don't notice.
-- **Hubble**, Cilium's flow log. Every connection is recorded with its verdict
-  (forwarded or dropped) and, for drops, the reason. Hubble Relay collects the
-  flows from all nodes and the Hubble UI draws them as a map.
+1. **frontend asks CoreDNS for `backend`.** CoreDNS answers with the Service
+   IP. That's all it does; the request itself never goes through CoreDNS.
+2. **kube-proxy turns the Service IP into a pod IP.** frontend sends the
+   request to the Service IP, and kube-proxy's rules on worker-1 rewrite it to
+   the IP of the backend pod.
+3. **Cilium on worker-1 checks the egress policy.** frontend is allowed to call
+   backend on 8080, so Cilium sends the packet on towards worker-2.
+4. **WireGuard encrypts it between the VMs.** The packet leaves worker-1
+   through `cilium_wg0`, crosses the Azure network encrypted, and is decrypted
+   on worker-2.
+5. **Cilium on worker-2 checks the ingress policy and delivers it.** backend
+   only accepts traffic from frontend, so the packet reaches the backend pod.
+
+The `intruder` pod tries the same thing and is stopped at step 3: no policy
+lets it out, so Cilium drops the packet on worker-1 and it never reaches the
+network.
+
+At every step, the Cilium agent on that node reports the flow to Hubble Relay,
+and the Hubble UI shows it. That's how a drop shows up with the policy that
+caused it.
+
+Simple flow to remember:
+
+```
+frontend → CoreDNS (name to Service IP)
+frontend → Service IP → kube-proxy (pick a pod) → Cilium (policy)
+         → WireGuard (between VMs) → Cilium (policy) → backend
+```
+
+Without kube-proxy, Cilium does step 2 itself with eBPF, before the packet
+leaves the pod. The rest of the flow stays the same. That's the kube-proxy
+replacement I leave for later (see below).
 
 ## What gets built
 
