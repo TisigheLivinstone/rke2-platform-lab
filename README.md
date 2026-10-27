@@ -20,19 +20,19 @@ explains what problem the layer solves and why I chose it over the alternatives.
 | 7 | Backups and recovery | |
 | 8 | GitOps and CI | |
 
-## Running Part 1
+## Running it
 
-You need an Azure subscription, the Azure CLI (logged in), Terraform and an SSH key.
+[docs/runbook.md](docs/runbook.md) has every step, from a blank Windows machine
+to a deployed and tested lab, plus the problems I hit along the way and their
+fixes. In short, from WSL:
 
 ```bash
-cp terraform/terraform.tfvars.example terraform/terraform.tfvars   # fill in your values
-terraform -chdir=terraform init
-terraform -chdir=terraform apply -var-file=free-trial.tfvars
+terraform -chdir=terraform apply -var-file=free-trial.tfvars   # Part 1
 bash tests/01-foundation.sh
-terraform -chdir=terraform destroy -var-file=free-trial.tfvars
+cd ansible && ansible-playbook site.yml && cd ..               # Part 2
+bash tests/02-automation.sh
 ```
 
 `free-trial.tfvars` fits the layout into the 4 vCPUs an Azure Free Trial allows
 per region (2 workers, 1 vCPU VMs). Without it you get the production layout:
-a dedicated control plane and 3 workers. The write-up explains why production
-needs at least three.
+a dedicated control plane and 3 workers.

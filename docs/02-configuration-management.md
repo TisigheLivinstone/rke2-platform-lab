@@ -149,7 +149,17 @@ cd ansible
 ansible-playbook site.yml
 ```
 
-## Test
+## How I know it works
+
+`tests/02-automation.sh` checks four things. Ansible reaches all four VMs. A
+second run of the playbook changes nothing, which proves it's safe to repeat.
+Every setting is read back from each VM rather than assumed: chrony in sync,
+UTC, security updates without auto-reboot, the journal limit, the SSH settings
+as sshd actually applies them, and name lookups. And an SSH login that only
+offers a password is refused on every VM.
+
+The first run failed one check, the own-hostname lookup described above, which
+is how that problem was found. After the fix, all 8 checks passed.
 
 ```bash
 bash tests/02-automation.sh

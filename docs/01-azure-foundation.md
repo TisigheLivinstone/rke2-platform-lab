@@ -63,6 +63,14 @@ hardware I can throw away after each session.
 The trade-off is that everything AKS would handle is now my job, and that is
 exactly what I want to practise.
 
+### Terraform instead of the portal or Bicep
+
+Clicking through the portal can't be repeated or reviewed, and Bicep only works
+on Azure. Terraform describes the whole foundation in files, shows a plan of
+every change before making it, and works the same way on any cloud. It also
+writes the inventory and SSH config the next part needs, so no IP address is
+ever copied by hand.
+
 ### Two subnets instead of one
 
 If the bastion and the cluster shared a subnet, anyone who broke into the
@@ -158,7 +166,15 @@ terraform -chdir=terraform apply tfplan
 On a subscription without the 4-vCPU cap, leave out `-var-file=free-trial.tfvars`
 to get the production layout.
 
-## Test
+## How I know it works
+
+`tests/01-foundation.sh` checks each claim in the diagram against the running
+VMs: I can SSH to the bastion and through it to every cluster VM, each cluster
+VM reaches the internet from the NAT Gateway's IP and no other, only the bastion
+and the NAT Gateway own public IPs, no firewall rule opens the Kubernetes API
+port, and each storage node has an empty 32 GiB disk at LUN 0 that is not the
+OS disk. All 12 checks passed on the first deployment, and again after Part 2
+hardened SSH.
 
 ```bash
 bash tests/01-foundation.sh
