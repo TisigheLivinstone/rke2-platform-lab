@@ -56,7 +56,7 @@ Nothing new in Azure. This part changes what is inside the VMs.
 |---|---|
 | Inventory (`ansible/inventory/hosts.yml`) | Written by Terraform. Lists the VMs in groups: `bastion`, `cluster` (with `control_plane` and `workers`) and `storage_nodes`. |
 | Group variables (`ansible/inventory/group_vars/`) | Settings per group, for example which hosts may forward SSH connections |
-| Role `baseline` | Installs pending updates and reboots one VM at a time if needed, turns on daily security updates without automatic reboots, keeps chrony syncing the clock, sets UTC, caps the journal at 500 MB |
+| Role `baseline` | Installs pending updates and reboots one VM at a time if needed, turns on daily security updates without automatic reboots, pins the VM's own name to its private IP, keeps chrony syncing the clock, sets UTC, caps the journal at 500 MB |
 | Role `ssh_hardening` | Keys only, one allowed user, no root login, no agent or X11 forwarding, TCP forwarding only on the bastion and control plane |
 | `site.yml` | The entry point. Each later part adds its playbook here. |
 
@@ -102,6 +102,19 @@ margin. Reboots should happen when I decide, one node at a time.
 
 The role checks the new config with `sshd -t` before reloading SSH, so a typo
 fails the run instead of locking me out.
+
+### Each VM's own name in /etc/hosts
+
+The first test run failed on one check: each VM looking up its own name got
+back an IPv6 link-local address (`fe80::...`) instead of its private IP. Other
+VMs resolved fine through Azure DNS, but a VM never asks DNS about itself.
+With no line for its own name in `/etc/hosts`, Ubuntu answers locally and
+picks the link-local address.
+
+Kubernetes and etcd use that lookup to decide which address a node advertises,
+so this would have shown up in Part 3 as a cluster that half works. The
+baseline now writes one line per VM, its own name and private IP, and leaves
+everything else to Azure DNS.
 
 ### What is not here yet
 

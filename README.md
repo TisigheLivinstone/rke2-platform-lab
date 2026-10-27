@@ -12,7 +12,7 @@ explains what problem the layer solves and why I chose it over the alternatives.
 | Part | Layer | Status |
 |---|---|---|
 | 1 | [Azure foundation](docs/01-azure-foundation.md): private network, bastion, NAT Gateway, VMs | Deployed and tested |
-| 2 | [Configuration management](docs/02-configuration-management.md): Ansible OS baseline for every VM | In progress |
+| 2 | [Configuration management](docs/02-configuration-management.md): Ansible OS baseline for every VM | Deployed and tested |
 | 3 | Kubernetes with RKE2 | |
 | 4 | Pod networking with Cilium | |
 | 5 | Storage with Rook-Ceph | |
