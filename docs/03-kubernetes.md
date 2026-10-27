@@ -108,17 +108,30 @@ RKE2 takes an etcd snapshot every 6 hours and keeps the last 10. They sit on
 cp-1's own disk, so they don't survive losing the VM. Copying them somewhere
 safe is what Part 7 is about.
 
-### One vCPU on the control plane
+### One vCPU on the control plane, and what it broke
 
-RKE2 recommends 2 vCPUs for a server node. The Free Trial leaves 1. It works
-for a lab, but the API is slower to respond and startup takes several minutes.
-In production the control plane would be the D2s_v5 from the Terraform
-defaults, or three of them for a highly available etcd.
+RKE2 recommends 2 vCPUs for a server node. The Free Trial leaves 1, and the
+first install showed what that means.
+
+Every Kubernetes component reserves some CPU, and the scheduler only places a
+pod where enough unreserved CPU is left. RKE2's default reservations for the
+control plane add up to 1100m, more than the 1000m a single vCPU has. The
+control plane started, but when RKE2 tried to run the small job that installs
+Cilium, cp-1 refused it: no CPU left to reserve. Without Cilium no node could
+become Ready, and the playbook timed out waiting.
+
+The fix was one setting, `control-plane-resource-requests`, bringing the total
+down to 500m. These are reservations for scheduling, not limits: each component
+can still use the whole vCPU when it's free. After a restart, Cilium installed
+and all three nodes were Ready within a minute.
+
+On a real control plane I would keep RKE2's defaults and give it the D2s_v5
+from the Terraform defaults, or three of them for a highly available etcd.
 
 ### What is not here yet
 
 No ingress controller: nothing is published to the internet yet, so RKE2's
-bundled ingress-nginx is turned off. No network policies, storage or monitoring
+bundled one (Traefik, since v1.36) is turned off. No network policies, storage or monitoring
 either. Those are Parts 4 to 6.
 
 ## How I know it works
@@ -129,16 +142,21 @@ either. Those are Parts 4 to 6.
   directly, while `kubectl` through the SSH tunnel reaches the API and reports
   the pinned version.
 - **The cluster is healthy.** All 3 nodes are Ready, cp-1 carries its taint,
-  and every system pod is running.
+  the four control plane components are running, every system Deployment and
+  DaemonSet has all its replicas ready, and every RKE2 install job finished.
 - **Applications run where they should.** A two-replica test app lands on both
   workers and never on cp-1.
 - **Pods can reach each other across VMs.** A client pod reaches the app pods
   on both workers by IP, and reaches the service by its cluster DNS name.
 - **The hardening is real.** A pod asking for privileged access to the host is
   rejected, and an etcd snapshot can be taken and listed.
+- **It's safe to run again.** A second run of the Kubernetes playbook changes
+  nothing on any node.
 
-Running the playbook a second time must also change nothing; the Part 2 test
-checks that for the whole `site.yml`, which now includes Kubernetes.
+All 16 checks passed. The first version of the health check failed on two
+leftover pods from the refused install, even though their jobs had been retried
+and completed. Checking raw pod status was the wrong question, so the test now
+asks what each component should be doing instead.
 
 ```bash
 bash tests/03-kubernetes.sh

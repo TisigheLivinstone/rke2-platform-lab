@@ -17,16 +17,17 @@ if [ "$reached" -eq "$hosts" ]; then ok "ping succeeded on $reached of $hosts VM
 
 echo
 echo "First run applies the baseline"
-if ansible-playbook site.yml > "$LOG/run1.log" 2>&1; then
-  ok "site.yml completed"
+# Only the baseline playbook: site.yml also builds Kubernetes (Part 3).
+if ansible-playbook playbooks/baseline.yml > "$LOG/run1.log" 2>&1; then
+  ok "baseline.yml completed"
 else
-  bad "site.yml failed, see $LOG/run1.log"
+  bad "baseline.yml failed, see $LOG/run1.log"
 fi
 sed -n '/PLAY RECAP/,$p' "$LOG/run1.log"
 
 echo
 echo "Second run changes nothing"
-ansible-playbook site.yml > "$LOG/run2.log" 2>&1
+ansible-playbook playbooks/baseline.yml > "$LOG/run2.log" 2>&1
 changed=$(sed -n '/PLAY RECAP/,$p' "$LOG/run2.log" | grep -Eo 'changed=[0-9]+' | cut -d= -f2 | awk '{s+=$1} END {print s+0}')
 if [ "${changed:-1}" -eq 0 ]; then ok "second run reported changed=0 on every VM"; else bad "second run changed $changed task(s), see $LOG/run2.log"; fi
 

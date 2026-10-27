@@ -200,7 +200,7 @@ Logs in to all four VMs (the bastion directly, the others through it) and runs
 a small test. Every VM should answer `pong`. Changes nothing.
 
 ```bash
-ansible-playbook site.yml
+ansible-playbook playbooks/baseline.yml
 ```
 
 Applies the baseline to every VM: installs updates, turns on daily security
@@ -215,6 +215,67 @@ bash tests/02-automation.sh
 
 Runs the playbook again (it must change nothing), reads every setting back from
 each VM, and checks that password logins are refused. Expect `8 passed, 0 failed`.
+
+## 5. Part 3: Kubernetes with RKE2
+
+### Install kubectl
+
+```bash
+VERSION=v1.36.5
+cd /tmp
+curl -fsSLO https://dl.k8s.io/release/${VERSION}/bin/linux/amd64/kubectl
+curl -fsSLO https://dl.k8s.io/release/${VERSION}/bin/linux/amd64/kubectl.sha256
+echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c -
+install -m 0755 kubectl ~/.local/bin/kubectl
+```
+
+Downloads kubectl, the command line tool for Kubernetes, at the same version as
+the cluster, checks it against the official checksum (it must print `OK`) and
+installs it next to Terraform. Then go back to the repo folder.
+
+### Build the cluster
+
+```bash
+cd ansible
+ansible-playbook playbooks/kubernetes.yml
+cd ..
+```
+
+Installs RKE2 on cp-1 and starts the control plane, then installs it on the
+workers and joins them to cp-1. Waits until all three nodes are Ready, labels
+the workers, and copies the admin kubeconfig to `~/.kube/rke2lab.yaml`. The
+join token is created in `~/.rke2lab/` on the first run. Neither file goes in
+the repo. About 15 minutes.
+
+### Reach the API
+
+```bash
+ssh -F ssh_config -N -L 6443:127.0.0.1:6443 rke2lab-cp-1 &
+```
+
+Opens an SSH tunnel through the bastion: anything sent to port 6443 on your
+machine arrives at the API server on cp-1. `-N` means no shell, and `&` keeps it
+running in the background. Port 6443 is never opened in Azure.
+
+```bash
+export KUBECONFIG=~/.kube/rke2lab.yaml
+kubectl get nodes
+```
+
+Tells kubectl which cluster to use, then lists the nodes. All three should
+show `Ready`. Stop the tunnel with `kill %1` when you're done.
+
+### Test
+
+```bash
+bash tests/03-kubernetes.sh
+```
+
+Opens its own tunnel, then checks the API is private, the nodes and system
+components are healthy, a test app runs only on the workers, pods reach each
+other across VMs, a privileged pod is rejected, an etcd snapshot works, and a
+second run of the playbook changes nothing. Removes its test app at the end.
+Expect `16 passed, 0 failed`.
 
 ## Day to day
 
@@ -241,8 +302,8 @@ Opens a shell on a VM through the bastion, using the SSH config Terraform wrote.
 terraform -chdir=terraform destroy -var-file=free-trial.tfvars
 ```
 
-Deletes everything this lab created in Azure. Costs drop to zero. Sections 3 and
-4 rebuild it in about 15 minutes.
+Deletes everything this lab created in Azure. Costs drop to zero. Sections 3 to
+5 rebuild it in about 30 minutes.
 
 ## Troubleshooting
 
@@ -254,3 +315,4 @@ Problems I actually hit, and the fix for each.
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` after a rebuild | New VMs, same private IPs | `terraform apply` resets the lab's `known_hosts` file; or delete `known_hosts` in the repo root |
 | `UNPROTECTED PRIVATE KEY FILE`, or Ansible ignores `ansible.cfg` | C: drive mounted without Linux permissions | The `/etc/wsl.conf` change in section 1, then `wsl --shutdown` |
 | `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | Free Trial allows 4 vCPUs per region | Use `free-trial.tfvars`, and a region with nothing else running in it |
+| Nodes stay `NotReady`; `helm-install-rke2-cilium` shows `UnexpectedAdmissionError` | The control plane's default CPU reservations fill the 1 vCPU cp-1, so the Cilium install job can't be placed | `control-plane-resource-requests` in the server config (already set) |

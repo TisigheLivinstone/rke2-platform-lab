@@ -99,5 +99,18 @@ else
 fi
 
 echo
+echo "Running the playbook again changes nothing"
+LOG=$(mktemp)
+(cd ansible && ansible-playbook playbooks/kubernetes.yml > "$LOG" 2>&1)
+changed=$(sed -n '/PLAY RECAP/,$p' "$LOG" | grep -Eo 'changed=[0-9]+' | cut -d= -f2 | awk '{s+=$1} END {print s+0}')
+if grep -q 'failed=[1-9]' "$LOG"; then
+  bad "kubernetes.yml failed on a second run, see $LOG"
+elif [ "$changed" -eq 0 ]; then
+  ok "kubernetes.yml reported changed=0 on every node"
+else
+  bad "kubernetes.yml changed $changed task(s) on a second run, see $LOG"
+fi
+
+echo
 echo "Result: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

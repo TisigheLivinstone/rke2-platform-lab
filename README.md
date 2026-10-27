@@ -29,9 +29,13 @@ fixes. In short, from WSL:
 ```bash
 terraform -chdir=terraform apply -var-file=free-trial.tfvars   # Part 1
 bash tests/01-foundation.sh
-cd ansible && ansible-playbook site.yml && cd ..               # Part 2
+cd ansible && ansible-playbook playbooks/baseline.yml && cd ..     # Part 2
 bash tests/02-automation.sh
+cd ansible && ansible-playbook playbooks/kubernetes.yml && cd ..   # Part 3
+bash tests/03-kubernetes.sh
 ```
+
+`ansible-playbook site.yml` runs every Ansible part in order.
 
 `free-trial.tfvars` fits the layout into the 4 vCPUs an Azure Free Trial allows
 per region (2 workers, 1 vCPU VMs). Without it you get the production layout:

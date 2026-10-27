@@ -146,7 +146,7 @@ From WSL, in the repo folder:
 
 ```bash
 cd ansible
-ansible-playbook site.yml
+ansible-playbook playbooks/baseline.yml
 ```
 
 ## How I know it works
