@@ -169,13 +169,37 @@ the mgr).
 
 - **Ceph is healthy.** `HEALTH_OK`, 3 mons in quorum, 3 OSDs up, one on each
   node.
+
+  ![Ceph dashboard inventory: 3 hosts, 3 monitors, 1 manager, 3 OSDs, 2 pools and 33 placement groups, all healthy](05-dashboard-health.png)
+
 - **The copies are spread.** The pool keeps 3 copies, one per host, and
-  `ceph-block` is the default StorageClass.
+  `ceph-block` is the default StorageClass. The CRUSH map is what Ceph uses to
+  place the copies: each host holds one OSD, and the pool's rule puts each copy
+  on a different host.
+
+  ![CRUSH map: the default root with three hosts, one OSD each](05-dashboard-crush.png)
+
 - **Data follows the pod.** A pod writes a file to a PVC on one worker, gets
   deleted, and a new pod on the other worker reads the same file.
+
+  ![A file written by a pod on worker-1 is read by a new pod on worker-2](05-data-follows-pod.png)
+
+  Behind the PVC is a 1 GiB Ceph block image in `ceph-blockpool`, created by
+  the CSI driver.
+
+  ![Ceph dashboard: the PVC's block image in ceph-blockpool](05-dashboard-image.png)
+
 - **Losing a node loses nothing.** With one OSD stopped, the volume can still be
   read and written, and Ceph reports the missing copy. When the OSD is back,
   Ceph returns to `HEALTH_OK`.
+
+  ![Terminal: worker-2's OSD stopped, ceph -s reports HEALTH_WARN and degraded data, and a pod on worker-1 still reads the old file and writes a new one](05-node-loss.png)
+
+  With the OSD started again, Ceph copies over what it missed and is back to
+  `HEALTH_OK` within seconds.
+
+  ![Terminal: the OSD scaled back up, ceph health is HEALTH_OK and all 3 OSDs are up](05-node-recovered.png)
+
 - **Only Ceph is privileged.** The `rook-ceph` namespace is privileged, and a
   privileged pod is still rejected everywhere else.
 - **It's safe to run again.** A second run of the storage playbook changes
@@ -188,8 +212,6 @@ above: the missing CSI drivers chart, and the `aes` keys. After both fixes, all
 ```bash
 bash tests/05-storage.sh
 ```
-
-![Part 5 test output with all 14 checks passing](05-storage-tests.png)
 
 ## What the next part needs from this one
 
@@ -225,5 +247,3 @@ kubectl -n rook-ceph port-forward svc/rook-ceph-mgr-dashboard 8443:8443
 
 Then browse to https://localhost:8443 and log in as `admin` with that password.
 The certificate is self-signed, so the browser warns once.
-
-![Ceph dashboard showing the cluster healthy with 3 OSDs](05-ceph-dashboard.png)
