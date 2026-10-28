@@ -47,7 +47,7 @@ from the internet can start a connection to the private subnet: there is no
 public IP there and no rule that would allow it. The Kubernetes API port (6443)
 is not opened anywhere.
 
-![Resource group rke2lab-rg and its resources in South Africa North](01-resource-group.png)
+![Resource group rke2lab-rg and its resources in South Africa North](screenshots/01-resource-group.png)
 
 ## Decisions
 
@@ -84,7 +84,7 @@ subnet. In Azure it is not inside any subnet. It is its own resource with its
 own public IP, attached to the subnets it serves. That is why the diagram shows
 it outside both subnets, with an arrow from the private subnet.
 
-![NAT Gateway rke2lab-natgw serving one subnet of rke2lab-vnet with one public IP](01-nat-gateway.png)
+![NAT Gateway rke2lab-natgw serving one subnet of rke2lab-vnet with one public IP](screenshots/01-nat-gateway.png)
 
 ### Two workers here, at least three in production
 

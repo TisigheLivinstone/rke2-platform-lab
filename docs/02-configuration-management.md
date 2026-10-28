@@ -165,4 +165,4 @@ is how that problem was found. After the fix, all 8 checks passed.
 bash tests/02-automation.sh
 ```
 
-![Part 2 test output with changed=0 on every VM and all 8 checks passing](02-ansible-tests.png)
+![Part 2 test output with changed=0 on every VM and all 8 checks passing](screenshots/02-ansible-tests.png)
