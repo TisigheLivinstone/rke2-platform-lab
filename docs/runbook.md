@@ -321,6 +321,68 @@ With the tunnel from Part 3 running, forwards port 12000 on your machine to the
 Hubble UI. Browse to http://localhost:12000 and pick a namespace to see its
 flows. Stop it with Ctrl+C.
 
+## 7. Part 5: Storage with Rook-Ceph
+
+### Install Rook and Ceph
+
+```bash
+cd ansible
+ansible-playbook playbooks/storage.yml
+cd ..
+```
+
+Writes three charts to the folder RKE2 watches on cp-1: the Rook operator, the
+Ceph CSI drivers, and the Ceph cluster. RKE2 installs them, Rook prepares the
+empty data disk on each node, and starts the Ceph mons, mgr and OSDs. The
+playbook waits until Ceph reports `HEALTH_OK`, an OSD runs on every node, the
+CSI driver is up and `ceph-block` is the default StorageClass. About 15 minutes
+on a first run, mostly image downloads.
+
+### Test
+
+```bash
+bash tests/05-storage.sh
+```
+
+Opens its own tunnel, then checks Ceph's health, mons and OSDs, that the pool
+keeps 3 copies on 3 different hosts, and that a file written to a volume on one
+worker can be read on the other. Stops the OSD on one worker for a while to
+show the volume still works and Ceph reports the missing copy, then brings it
+back and waits for `HEALTH_OK`. Removes its demo namespace at the end. Expect
+`14 passed, 0 failed`.
+
+```bash
+bash tests/04-networking.sh
+bash tests/03-kubernetes.sh
+```
+
+The Part 4 and Part 3 tests again. Expect `10 passed` and `16 passed`.
+
+### Check Ceph by hand
+
+```bash
+kubectl -n rook-ceph exec deploy/rook-ceph-tools -- ceph -s
+```
+
+Runs `ceph -s` in the toolbox pod: health, mons in quorum, OSDs up, and how
+full the disks are.
+
+### Open the Ceph dashboard
+
+```bash
+kubectl -n rook-ceph get secret rook-ceph-dashboard-password -o jsonpath='{.data.password}' | base64 -d; echo
+```
+
+Prints the dashboard's `admin` password, which Rook generated at install.
+
+```bash
+kubectl -n rook-ceph port-forward svc/rook-ceph-mgr-dashboard 8443:8443
+```
+
+With the tunnel from Part 3 running, forwards port 8443 to the dashboard.
+Browse to https://localhost:8443 (self-signed certificate, so the browser warns
+once) and log in as `admin`. Stop it with Ctrl+C.
+
 ## Day to day
 
 ```bash
@@ -347,7 +409,7 @@ terraform -chdir=terraform destroy -var-file=free-trial.tfvars
 ```
 
 Deletes everything this lab created in Azure. Costs drop to zero. Sections 3 to
-6 rebuild it in about 35 minutes.
+7 rebuild it in about 50 minutes.
 
 ## Troubleshooting
 
@@ -361,3 +423,6 @@ Problems I actually hit, and the fix for each.
 | `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | Free Trial allows 4 vCPUs per region | Use `free-trial.tfvars`, and a region with nothing else running in it |
 | Nodes stay `NotReady`; `helm-install-rke2-cilium` shows `UnexpectedAdmissionError` | The control plane's default CPU reservations fill the 1 vCPU cp-1, so the Cilium install job can't be placed | `control-plane-resource-requests` in the server config (already set) |
 | `Wait for WireGuard to be active` retries and fails, yet `cilium-dbg encrypt status` shows WireGuard on every node | The check piped kubectl into `grep -q` under `set -o pipefail`. grep exits at the first match, kubectl gets a broken pipe (exit 141), and pipefail reports a failure | Capture the output first, then grep it (already fixed in the role and the test) |
+| Ceph is `HEALTH_OK` or close, but PVCs stay `Pending` and there are no `rook-ceph.rbd.csi.ceph.com` pods | Since Rook v1.20 the CSI drivers are a separate chart (`ceph-csi-drivers`), and only the operator and cluster charts were installed | Install the drivers chart with Rook's values (already in the role: `ceph-csi-drivers.yaml.j2`) |
+| `HEALTH_WARN ... auth client entities with insecure key types` | The cluster chart gives the CSI keys the old `aes` type, meant for kernels before 7.0 | On kernel 7.0+, set the CSI `keyType` to `aes256k` and rotate with `keyGeneration: 2` (already set) |
+| `HEALTH_WARN Monitors are configured to allow auth using insecure key types` | Ceph still accepts `aes` keys | Check every key is `aes256k` first, then `allowedCiphers: [aes256k]` (already set) |

@@ -1,0 +1,32 @@
+# Managed by Ansible (roles/rook_ceph).
+# RKE2 watches this folder and installs every HelmChart in it.
+
+# OSDs need direct access to the raw data disks, which the CIS "restricted"
+# Pod Security level forbids. This is the only namespace allowed to run
+# privileged pods; every other namespace stays restricted.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rook-ceph
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+# The Rook operator: turns the CephCluster below into running Ceph daemons
+# and keeps them running.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: rook-ceph
+  namespace: kube-system
+spec:
+  repo: https://charts.rook.io/release
+  chart: rook-ceph
+  version: {{ rook_version }}
+  targetNamespace: rook-ceph
+  valuesContent: |-
+    # The default asks for 200m CPU; it's idle almost all the time.
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { memory: 512Mi }

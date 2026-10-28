@@ -1,0 +1,40 @@
+# Managed by Ansible (roles/rook_ceph).
+# The CSI driver that creates Ceph volumes for PVCs and attaches them to the
+# node running the pod. The Rook operator chart installs the ceph-csi operator;
+# this chart tells it which drivers to run. The values are Rook's own
+# (deploy/charts/ceph-csi-drivers/values.yaml), with only block storage on.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: ceph-csi-drivers
+  namespace: kube-system
+spec:
+  repo: https://ceph.github.io/ceph-csi-operator
+  chart: ceph-csi-drivers
+  # The same version as the ceph-csi operator that Rook {{ rook_version }} installs.
+  version: {{ ceph_csi_drivers_version }}
+  targetNamespace: rook-ceph
+  valuesContent: |-
+    operatorConfig:
+      namespace: rook-ceph
+      driverSpecDefaults:
+        imageSet:
+          name: rook-csi-operator-image-set-configmap
+        nodePlugin:
+          priorityClassName: system-node-critical
+        controllerPlugin:
+          priorityClassName: system-cluster-critical
+    drivers:
+      rbd:
+        enabled: true
+        name: rook-ceph.rbd.csi.ceph.com
+      # Shared filesystems, NFS and NVMe-oF aren't used, so their drivers don't run.
+      cephfs:
+        enabled: false
+        name: rook-ceph.cephfs.csi.ceph.com
+      nfs:
+        enabled: false
+        name: rook-ceph.nfs.csi.ceph.com
+      nvmeof:
+        enabled: false
+        name: rook-ceph.nvmeof.csi.ceph.com

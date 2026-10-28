@@ -1,0 +1,123 @@
+# Managed by Ansible (roles/rook_ceph).
+# The Ceph cluster itself. The Rook operator (rook-ceph.yaml) reads it and
+# creates the mons, mgr and OSDs.
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: rook-ceph-cluster
+  namespace: kube-system
+spec:
+  repo: https://charts.rook.io/release
+  chart: rook-ceph-cluster
+  version: {{ rook_version }}
+  targetNamespace: rook-ceph
+  valuesContent: |-
+    operatorNamespace: rook-ceph
+
+    cephImage:
+      repository: quay.io/ceph/ceph
+      tag: {{ ceph_image_tag }}
+
+    # A pod with the ceph command line, for checks and tests.
+    toolbox:
+      enabled: true
+      resources:
+        requests: { cpu: 10m, memory: 64Mi }
+        limits: { memory: 256Mi }
+
+    cephClusterSpec:
+      # The keys the CSI driver uses to talk to Ceph. The chart defaults to the
+      # older aes type for kernels before 7.0, which Ceph reports as insecure.
+      # These nodes run kernel 7.0, so they use aes256k. Generation 2 rotates
+      # the keys this cluster was first created with; raising the number later
+      # rotates them again. No old keys are kept.
+      # With every key on aes256k, the old cipher is refused outright: no new
+      # aes keys can be made and none can log in. (Check every key's type
+      # before setting this on an older cluster, or daemons get locked out.)
+      security:
+        cephx:
+          allowedCiphers: [aes256k]
+          csi:
+            keyType: aes256k
+            keyRotationPolicy: KeyGeneration
+            keyGeneration: 2
+            keepPriorKeyCountMax: 0
+
+      # 3 mons, one per node: 2 of 3 must agree, so one node can be lost.
+      mon:
+        count: 3
+        allowMultiplePerNode: false
+      # One mgr. A standby would cost memory these VMs don't have.
+      mgr:
+        count: 1
+        allowMultiplePerNode: false
+        modules:
+          - name: rook
+            enabled: false
+      # Reached with kubectl port-forward through the SSH tunnel only.
+      dashboard:
+        enabled: true
+        ssl: true
+      # Not needed in a lab, and each one is another pod on every node.
+      crashCollector:
+        disable: true
+      logCollector:
+        enabled: false
+
+      # Rook's defaults ask for a full CPU per mon and per OSD and 4 GiB of
+      # memory per OSD. Each VM has 1 CPU, so these are cut to what Ceph
+      # needs when it's mostly idle. The OSD's memory limit also sets how much
+      # it caches.
+      resources:
+        mon:
+          requests: { cpu: 50m, memory: 384Mi }
+          limits: { memory: 1Gi }
+        osd:
+          requests: { cpu: 100m, memory: 1536Mi }
+          limits: { memory: 2Gi }
+        mgr:
+          requests: { cpu: 50m, memory: 384Mi }
+          limits: { memory: 1Gi }
+        mgr-sidecar:
+          requests: { cpu: 10m, memory: 40Mi }
+          limits: { memory: 100Mi }
+        prepareosd:
+          requests: { cpu: 50m, memory: 50Mi }
+        exporter:
+          requests: { cpu: 10m, memory: 50Mi }
+          limits: { memory: 128Mi }
+        cmd-reporter:
+          requests: { cpu: 50m, memory: 100Mi }
+          limits: { memory: 512Mi }
+
+      # Only the data disks, named by their Azure LUN, never the OS disk.
+      storage:
+        useAllNodes: false
+        useAllDevices: false
+        nodes:
+{% for node in groups['storage_nodes'] %}
+          - name: {{ node }}
+            devices:
+              - name: {{ rook_data_disk }}
+{% endfor %}
+
+      # cp-1 is the third storage node on the Free Trial layout, so the mon and
+      # OSD (and the job that prepares the OSD's disk) tolerate its taint.
+      # Everything else, apps included, stays off the control plane.
+      placement:
+        mon:
+          tolerations:
+            - { key: CriticalAddonsOnly, operator: Exists }
+        osd:
+          tolerations:
+            - { key: CriticalAddonsOnly, operator: Exists }
+        prepareosd:
+          tolerations:
+            - { key: CriticalAddonsOnly, operator: Exists }
+
+    # The chart's default block pool is what I want: ceph-blockpool keeps 3
+    # copies, one per host, behind the default StorageClass ceph-block.
+    # Shared filesystems and object storage need extra daemons and nothing
+    # uses them yet.
+    cephFileSystems: []
+    cephObjectStores: []

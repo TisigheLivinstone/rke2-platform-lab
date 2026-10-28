@@ -1,0 +1,57 @@
+# Installs Rook and a Ceph cluster on the data disks. Runs on the control plane.
+
+- name: Write the Rook operator and Ceph cluster charts where RKE2 picks them up
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/var/lib/rancher/rke2/server/manifests/{{ item }}"
+    mode: "0600"
+  loop:
+    - rook-ceph.yaml
+    - ceph-csi-drivers.yaml
+    - rook-ceph-cluster.yaml
+
+# RKE2 installs the charts in the background, then Rook prepares each data disk
+# and starts the Ceph daemons. These waits make the playbook finish only once
+# the storage is usable.
+- name: Wait for the Rook operator to be running
+  ansible.builtin.command: "{{ rook_kubectl }} -n rook-ceph rollout status deployment/rook-ceph-operator --timeout=30s"
+  register: operator
+  changed_when: false
+  retries: 40
+  delay: 15
+  until: operator.rc == 0
+
+- name: Wait for Ceph to report HEALTH_OK
+  ansible.builtin.command: "{{ rook_kubectl }} -n rook-ceph get cephcluster -o jsonpath={.items[0].status.ceph.health}"
+  register: health
+  changed_when: false
+  retries: 60
+  delay: 20
+  until: health.stdout == 'HEALTH_OK'
+
+- name: Wait for an OSD on every storage node
+  ansible.builtin.command: "{{ rook_kubectl }} -n rook-ceph get deployments -l app=rook-ceph-osd -o jsonpath={.items[*].status.readyReplicas}"
+  register: osds
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: osds.stdout.split() | map('int') | sum == groups['storage_nodes'] | length
+
+- name: Wait for the CSI driver that creates and attaches volumes
+  ansible.builtin.command: "{{ rook_kubectl }} -n rook-ceph rollout status {{ item }} --timeout=30s"
+  loop:
+    - deployment/rook-ceph.rbd.csi.ceph.com-ctrlplugin
+    - daemonset/rook-ceph.rbd.csi.ceph.com-nodeplugin
+  register: csi
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: csi.rc == 0
+
+- name: Wait for the default StorageClass ceph-block
+  ansible.builtin.command: "{{ rook_kubectl }} get storageclass ceph-block -o jsonpath='{.metadata.annotations.storageclass\\.kubernetes\\.io/is-default-class}'"
+  register: storageclass
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: storageclass.stdout == 'true'

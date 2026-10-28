@@ -1,0 +1,17 @@
+# Demo used by tests/05-storage.sh: a namespace and a 1 GiB volume from the
+# default StorageClass. The test starts pods on chosen workers to use it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storage-demo
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: data
+  namespace: storage-demo
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

@@ -7,3 +7,6 @@
 
 - name: Pod networking
   ansible.builtin.import_playbook: playbooks/networking.yml
+
+- name: Storage
+  ansible.builtin.import_playbook: playbooks/storage.yml

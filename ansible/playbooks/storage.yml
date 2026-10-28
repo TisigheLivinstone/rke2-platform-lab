@@ -1,0 +1,6 @@
+# Storage: Rook runs Ceph on the data disks, behind the default StorageClass ceph-block.
+- name: Install Rook-Ceph
+  hosts: control_plane
+  become: true
+  roles:
+    - rook_ceph

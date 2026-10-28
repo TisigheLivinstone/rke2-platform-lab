@@ -5,7 +5,7 @@ with monitoring, backups and GitOps on top. I build it one layer at a time.
 Each layer is deployed and tested before the next one starts, and each write-up
 explains what problem the layer solves and why I chose it over the alternatives.
 
-![The platform so far: Azure network, RKE2 and Cilium with WireGuard and Hubble](docs/architecture/pod-networking.drawio.png)
+![The platform so far: Azure network, RKE2, Cilium with WireGuard, and Rook-Ceph storage on every node's data disk](docs/architecture/storage.drawio.png)
 
 ## Parts
 
@@ -15,7 +15,7 @@ explains what problem the layer solves and why I chose it over the alternatives.
 | 2 | [Configuration management](docs/02-configuration-management.md): Ansible OS baseline for every VM | Deployed and tested |
 | 3 | [Kubernetes with RKE2](docs/03-kubernetes.md): CIS-hardened cluster, API through an SSH tunnel | Deployed and tested |
 | 4 | [Pod networking with Cilium](docs/04-pod-networking.md): WireGuard between nodes, default-deny policies, Hubble | Deployed and tested |
-| 5 | Storage with Rook-Ceph | |
+| 5 | [Storage with Rook-Ceph](docs/05-storage.md): replicated volumes on the VMs' data disks | Deployed and tested |
 | 6 | Monitoring | |
 | 7 | Backups and recovery | |
 | 8 | GitOps and CI | |
@@ -35,6 +35,8 @@ cd ansible && ansible-playbook playbooks/kubernetes.yml && cd ..   # Part 3
 bash tests/03-kubernetes.sh
 cd ansible && ansible-playbook playbooks/networking.yml && cd ..   # Part 4
 bash tests/04-networking.sh
+cd ansible && ansible-playbook playbooks/storage.yml && cd ..      # Part 5
+bash tests/05-storage.sh
 ```
 
 `ansible-playbook site.yml` runs every Ansible part in order.

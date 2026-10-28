@@ -1,0 +1,12 @@
+# Pinned so every rebuild gets the same storage. Rook v1.20 supports
+# Kubernetes 1.31 to 1.37 and ships Ceph v20.
+rook_version: v1.20.9
+ceph_image_tag: v20.2.4
+# Must match the ceph-csi-operator version the Rook chart depends on.
+ceph_csi_drivers_version: 1.0.4
+
+# The empty data disk Terraform attaches at LUN 0 on every storage node. Azure's
+# udev rules give it this name on SCSI and NVMe VMs alike.
+rook_data_disk: /dev/disk/azure/data/by-lun/0
+
+rook_kubectl: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
