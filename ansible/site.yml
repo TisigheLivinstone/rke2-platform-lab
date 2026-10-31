@@ -10,3 +10,6 @@
 
 - name: Storage
   ansible.builtin.import_playbook: playbooks/storage.yml
+
+- name: Monitoring
+  ansible.builtin.import_playbook: playbooks/monitoring.yml

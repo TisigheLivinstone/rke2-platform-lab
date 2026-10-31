@@ -1,0 +1,15 @@
+# Monitoring: kube-prometheus-stack, then the metrics of the layers below.
+- name: Install monitoring
+  hosts: control_plane
+  become: true
+  roles:
+    - monitoring
+    # Run again now that the Prometheus operator exists: both roles see its
+    # object types and turn on their metrics, alert rules and dashboards.
+    - cilium
+    - rook_ceph
+  tasks:
+    - name: Check every layer is scraped
+      ansible.builtin.include_role:
+        name: monitoring
+        tasks_from: targets

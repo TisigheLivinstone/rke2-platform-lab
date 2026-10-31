@@ -14,6 +14,13 @@ spec:
   valuesContent: |-
     operatorNamespace: rook-ceph
 
+    # Part 6: Ceph's metrics and alert rules for Prometheus. Only turned on
+    # once the Prometheus operator is installed, because the ServiceMonitor
+    # and PrometheusRule object types have to exist first.
+    monitoring:
+      enabled: {{ (prometheus_operator.rc == 0) | lower }}
+      createPrometheusRules: {{ (prometheus_operator.rc == 0) | lower }}
+
     cephImage:
       repository: quay.io/ceph/ceph
       tag: {{ ceph_image_tag }}

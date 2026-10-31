@@ -30,3 +30,7 @@ spec:
     resources:
       requests: { cpu: 50m, memory: 128Mi }
       limits: { memory: 512Mi }
+    # Part 6: lets the operator create ServiceMonitors, once the Prometheus
+    # operator is installed.
+    monitoring:
+      enabled: {{ (prometheus_operator.rc == 0) | lower }}

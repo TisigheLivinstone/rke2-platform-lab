@@ -1,0 +1,37 @@
+# Installs kube-prometheus-stack. Runs on the control plane.
+
+- name: Write the monitoring chart where RKE2 picks it up
+  ansible.builtin.template:
+    src: kube-prometheus-stack.yaml.j2
+    dest: /var/lib/rancher/rke2/server/manifests/kube-prometheus-stack.yaml
+    mode: "0600"
+
+# The roles for Cilium and Rook check for these types before turning on
+# their metrics, so they have to exist first.
+- name: Wait for the Prometheus operator's object types
+  ansible.builtin.command: "{{ monitoring_kubectl }} get crd servicemonitors.monitoring.coreos.com prometheusrules.monitoring.coreos.com"
+  register: crds
+  changed_when: false
+  retries: 40
+  delay: 15
+  until: crds.rc == 0
+
+- name: Wait for the operator, Grafana and kube-state-metrics
+  ansible.builtin.command: "{{ monitoring_kubectl }} -n monitoring wait --for=condition=Available deployment --all --timeout=30s"
+  register: deployments
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: deployments.rc == 0
+
+- name: Wait for Prometheus, Alertmanager and node-exporter
+  ansible.builtin.command: "{{ monitoring_kubectl }} rollout status {{ item }} --timeout=30s"
+  loop:
+    - -n monitoring statefulset/prometheus-kube-prometheus-stack-prometheus
+    - -n monitoring statefulset/alertmanager-kube-prometheus-stack-alertmanager
+    - -n monitoring-node daemonset/kube-prometheus-stack-prometheus-node-exporter
+  register: workloads
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: workloads.rc == 0

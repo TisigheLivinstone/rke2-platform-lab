@@ -30,3 +30,24 @@ spec:
         backend:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
+{% if prometheus_operator.rc == 0 %}
+      # Part 6: flows as metrics (drops, DNS, TCP), scraped by Prometheus,
+      # with Hubble's Grafana dashboard.
+      metrics:
+        enabled: [dns, drop, tcp, flow, icmp, port-distribution]
+        serviceMonitor: { enabled: true }
+        dashboards: { enabled: true }
+
+    # Part 6: the agent's and operator's own metrics and dashboards. Only
+    # turned on once the Prometheus operator is installed, because the
+    # ServiceMonitor object type has to exist first.
+    prometheus:
+      enabled: true
+      serviceMonitor: { enabled: true }
+    operator:
+      prometheus:
+        enabled: true
+        serviceMonitor: { enabled: true }
+      dashboards: { enabled: true }
+    dashboards: { enabled: true }
+{% endif %}

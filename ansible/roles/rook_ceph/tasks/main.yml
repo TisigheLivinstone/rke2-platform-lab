@@ -1,5 +1,13 @@
 # Installs Rook and a Ceph cluster on the data disks. Runs on the control plane.
 
+# Metrics need the Prometheus operator's object types (Part 6). On a fresh
+# build they don't exist yet, so Ceph's monitoring stays off until they do.
+- name: Check whether the Prometheus operator is installed
+  ansible.builtin.command: "{{ rook_kubectl }} get crd servicemonitors.monitoring.coreos.com prometheusrules.monitoring.coreos.com"
+  register: prometheus_operator
+  changed_when: false
+  failed_when: false
+
 - name: Write the Rook operator and Ceph cluster charts where RKE2 picks them up
   ansible.builtin.template:
     src: "{{ item }}.j2"

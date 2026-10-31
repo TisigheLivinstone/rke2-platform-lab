@@ -1,0 +1,23 @@
+# Runs after Cilium and Rook have turned their metrics on: waits until
+# Prometheus scrapes every target, and each layer below is among them.
+
+- name: Wait until every Prometheus target is up
+  ansible.builtin.shell: |
+    {{ monitoring_kubectl }} get --raw \
+      '/api/v1/namespaces/monitoring/services/http:kube-prometheus-stack-prometheus:9090/proxy/api/v1/targets?state=active' |
+    python3 -c '
+    import json, sys
+    targets = json.load(sys.stdin)["data"]["activeTargets"]
+    jobs = {t["labels"].get("job", "") for t in targets}
+    down = sorted({t["labels"].get("job", "") for t in targets if t["health"] != "up"})
+    missing = [j for j in sys.argv[1:] if not any(j in job for job in jobs)]
+    print("targets:", len(targets), "down:", down, "missing:", missing)
+    sys.exit(1 if down or missing else 0)
+    ' {{ monitoring_required_jobs | join(' ') }}
+  args:
+    executable: /bin/bash
+  register: targets
+  changed_when: false
+  retries: 30
+  delay: 20
+  until: targets.rc == 0

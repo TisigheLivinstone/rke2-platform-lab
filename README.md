@@ -16,7 +16,7 @@ explains what problem the layer solves and why I chose it over the alternatives.
 | 3 | [Kubernetes with RKE2](docs/03-kubernetes.md): CIS-hardened cluster, API through an SSH tunnel | Deployed and tested |
 | 4 | [Pod networking with Cilium](docs/04-pod-networking.md): WireGuard between nodes, default-deny policies, Hubble | Deployed and tested |
 | 5 | [Storage with Rook-Ceph](docs/05-storage.md): replicated volumes on the VMs' data disks | Deployed and tested |
-| 6 | Monitoring | |
+| 6 | [Monitoring](docs/06-monitoring.md): Prometheus, Alertmanager and Grafana, metrics from every layer | In progress |
 | 7 | Backups and recovery | |
 | 8 | GitOps and CI | |
 

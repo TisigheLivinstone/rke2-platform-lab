@@ -1,0 +1,15 @@
+# Pinned so every rebuild gets the same monitoring stack.
+kube_prometheus_stack_version: 92.10.1
+
+# Prometheus job names (or parts of them) that must be scraped: one per layer.
+monitoring_required_jobs:
+  - apiserver
+  - kubelet
+  - coredns
+  - node-exporter
+  - kube-state-metrics
+  - cilium-agent
+  - hubble
+  - rook-ceph-mgr
+
+monitoring_kubectl: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml

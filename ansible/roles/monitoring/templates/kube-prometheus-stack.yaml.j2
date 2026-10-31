@@ -1,0 +1,121 @@
+# Managed by Ansible (roles/monitoring).
+# RKE2 watches this folder and installs every HelmChart in it.
+
+# Prometheus, Alertmanager and Grafana. Stays at the cluster's default Pod
+# Security level, restricted.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+# node-exporter reads the host's own files, processes and network, which the
+# restricted level forbids. It gets this namespace to itself.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring-node
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: kube-prometheus-stack
+  namespace: kube-system
+spec:
+  repo: https://prometheus-community.github.io/helm-charts
+  chart: kube-prometheus-stack
+  version: {{ kube_prometheus_stack_version }}
+  targetNamespace: monitoring
+  valuesContent: |-
+    # RKE2 keeps the metrics of etcd, the scheduler, the controller manager
+    # and kube-proxy on 127.0.0.1, so they aren't scraped. Switch off their
+    # scraping, alert rules and dashboards, or they'd all report "down".
+    kubeEtcd: { enabled: false }
+    kubeControllerManager: { enabled: false }
+    kubeScheduler: { enabled: false }
+    kubeProxy: { enabled: false }
+    defaultRules:
+      rules:
+        etcd: false
+        kubeControllerManager: false
+        kubeProxy: false
+        kubeSchedulerAlerting: false
+        kubeSchedulerRecording: false
+
+    prometheus:
+      prometheusSpec:
+        scrapeInterval: 30s
+        retention: 7d
+        retentionSize: 8GB
+        resources:
+          requests: { cpu: 100m, memory: 1Gi }
+          limits: { memory: 2Gi }
+        # Pick up every ServiceMonitor and alert rule in the cluster, not only
+        # this chart's: Cilium and Rook create their own.
+        serviceMonitorSelectorNilUsesHelmValues: false
+        podMonitorSelectorNilUsesHelmValues: false
+        ruleSelectorNilUsesHelmValues: false
+        probeSelectorNilUsesHelmValues: false
+        scrapeConfigSelectorNilUsesHelmValues: false
+        # The history lives on a Ceph volume, so a restart or a move to the
+        # other worker loses nothing.
+        storageSpec:
+          volumeClaimTemplate:
+            spec:
+              storageClassName: ceph-block
+              accessModes: [ReadWriteOnce]
+              resources:
+                requests: { storage: 10Gi }
+
+    # No receiver yet: alerts are visible in Alertmanager and Grafana.
+    alertmanager:
+      alertmanagerSpec:
+        resources:
+          requests: { cpu: 10m, memory: 64Mi }
+          limits: { memory: 128Mi }
+
+    prometheusOperator:
+      resources:
+        requests: { cpu: 20m, memory: 64Mi }
+        limits: { memory: 256Mi }
+
+    kube-state-metrics:
+      resources:
+        requests: { cpu: 10m, memory: 64Mi }
+        limits: { memory: 256Mi }
+
+    prometheus-node-exporter:
+      namespaceOverride: monitoring-node
+      # Every node, the control plane included.
+      tolerations:
+        - operator: Exists
+      resources:
+        requests: { cpu: 10m, memory: 32Mi }
+        limits: { memory: 64Mi }
+
+    # The admin password is generated at install and kept in the
+    # kube-prometheus-stack-grafana secret. Dashboards come from code: the
+    # stack's own, Cilium's (from the cluster), and Ceph's from grafana.com,
+    # pinned by revision. Nothing is saved inside Grafana, so it needs no volume.
+    grafana:
+      resources:
+        requests: { cpu: 50m, memory: 192Mi }
+        limits: { memory: 512Mi }
+      dashboardProviders:
+        dashboardproviders.yaml:
+          apiVersion: 1
+          providers:
+            - name: ceph
+              folder: Ceph
+              type: file
+              disableDeletion: true
+              options:
+                path: /var/lib/grafana/dashboards/ceph
+      dashboards:
+        ceph:
+          ceph-cluster: { gnetId: 2842, revision: 18, datasource: Prometheus }
+          ceph-osd: { gnetId: 5336, revision: 9, datasource: Prometheus }
+          ceph-pools: { gnetId: 5342, revision: 9, datasource: Prometheus }

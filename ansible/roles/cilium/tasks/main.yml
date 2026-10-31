@@ -1,5 +1,13 @@
 # Configures RKE2's built-in Cilium. Runs on the control plane.
 
+# Metrics need the Prometheus operator's ServiceMonitor type (Part 6). On a
+# fresh build it doesn't exist yet, so they stay off until it does.
+- name: Check whether the Prometheus operator is installed
+  ansible.builtin.command: "{{ cilium_kubectl }} get crd servicemonitors.monitoring.coreos.com"
+  register: prometheus_operator
+  changed_when: false
+  failed_when: false
+
 - name: Write the Cilium settings where RKE2 picks them up
   ansible.builtin.template:
     src: rke2-cilium-config.yaml.j2
