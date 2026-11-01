@@ -1,7 +1,7 @@
-# For subscriptions capped at 4 vCPUs per region, such as an Azure Free Trial.
-# Same layout as production, scaled down: bastion, control plane and 2 workers,
-# 1 vCPU each. The control plane also gets a data disk so storage still has
-# three machines. Use with: terraform apply -var-file=free-trial.tfvars
+# The small, low-cost layout: the same design as production, scaled down to
+# 4 vCPUs in total. Bastion, control plane and 2 workers, 1 vCPU each. The
+# control plane also gets a data disk so storage still has three machines.
+# Use with: terraform apply -var-file=small.tfvars
 
 worker_count            = 2
 control_plane_data_disk = true

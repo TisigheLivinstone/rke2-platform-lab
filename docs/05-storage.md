@@ -119,7 +119,7 @@ of usable space, and any one node can be lost. Writes still work with 2 of the
 
 ### Ceph on the control plane too
 
-Ceph needs 3 machines and the Free Trial only has 2 workers, so cp-1 is the
+Ceph needs 3 machines and the small layout only has 2 workers, so cp-1 is the
 third storage node. Only the Ceph mon and OSD tolerate its taint; apps still
 never run there. With 3 workers this goes away.
 

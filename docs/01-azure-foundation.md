@@ -33,10 +33,10 @@ This part covers those five points and nothing else.
 Everything runs in South Africa North, the closest Azure region to me, and the
 only one where every VM size below was available to my subscription.
 
-The layout above is scaled to fit an Azure Free Trial, which caps every region
-at 4 vCPUs. The production version of the same design has a dedicated control
-plane and at least three workers. That is the Terraform default; the trial
-sizes live in `terraform/free-trial.tfvars`. The section on worker count below
+The layout above is the small, low-cost version of the design: everything fits
+in 4 vCPUs. The production version of the same design has a dedicated control
+plane and at least three workers. That is the Terraform default; the small
+sizes live in `terraform/small.tfvars`. The section on worker count below
 explains the difference.
 
 Traffic is simple to follow. I connect from my laptop to the bastion's public IP
@@ -88,7 +88,7 @@ it outside both subnets, with an arrow from the private subnet.
 
 ### Two workers here, at least three in production
 
-The Free Trial allows 4 vCPUs per region and the smallest VM has 1 vCPU, so a
+With the lab kept to 4 vCPUs and 1 vCPU as the smallest VM size, a
 bastion plus a control plane plus three workers (5 VMs) cannot fit. I kept the
 bastion, because removing it would put a cluster node on the internet, and
 dropped to two workers. The control plane gets a data disk as well, so the
@@ -149,7 +149,7 @@ repeat exactly. Part 2 uses those two files to do it with Ansible instead.
 |---|---|
 | `terraform/versions.tf` | Terraform and provider versions |
 | `terraform/variables.tf` | Settings, with production defaults. Rejects `0.0.0.0/0` as the admin IP. |
-| `terraform/free-trial.tfvars` | Smaller sizes and 2 workers for a 4-vCPU subscription |
+| `terraform/small.tfvars` | The small layout: 2 workers and 1 vCPU VMs, 4 vCPUs in total |
 | `terraform/network.tf` | Resource group, VNet, subnets, NAT Gateway, NSGs |
 | `terraform/compute.tf` | Bastion, control plane, workers, data disks, shutdown schedules |
 | `terraform/outputs.tf`, `terraform/templates/` | Outputs, the Ansible inventory and `ssh_config` |
@@ -159,12 +159,11 @@ repeat exactly. Part 2 uses those two files to do it with Ansible instead.
 ```bash
 cp terraform/terraform.tfvars.example terraform/terraform.tfvars
 terraform -chdir=terraform init
-terraform -chdir=terraform plan -var-file=free-trial.tfvars -out=tfplan
+terraform -chdir=terraform plan -var-file=small.tfvars -out=tfplan
 terraform -chdir=terraform apply tfplan
 ```
 
-On a subscription without the 4-vCPU cap, leave out `-var-file=free-trial.tfvars`
-to get the production layout.
+For the production layout, leave out `-var-file=small.tfvars`.
 
 ## How I know it works
 

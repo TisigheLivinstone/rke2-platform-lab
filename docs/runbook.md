@@ -149,8 +149,8 @@ ssh_public_key_path = "~/.ssh/rke2lab.pub"
 az vm list-usage -l southafricanorth --query "[?name.value=='cores']" -o table
 ```
 
-On a Free Trial, shows how many of the region's 4 vCPUs are already used. The
-trial layout needs all 4, so this should show 0 in use.
+Shows how many vCPUs are already in use in the region, against its quota. The
+small layout needs 4, so the quota must leave at least that much free.
 
 ## 3. Part 1: Azure foundation
 
@@ -162,12 +162,12 @@ Downloads the Azure provider Terraform needs. Only needed the first time, or
 after the provider version changes.
 
 ```bash
-terraform -chdir=terraform plan -var-file=free-trial.tfvars -out=tfplan
+terraform -chdir=terraform plan -var-file=small.tfvars -out=tfplan
 ```
 
 Compares the code with what exists in Azure and lists everything it would
 create, change or delete, without doing anything. `-var-file` applies the
-smaller trial sizes; `-out` saves the plan so the next step does exactly this
+small layout's sizes; `-out` saves the plan so the next step does exactly this
 and nothing else. Read it before going on.
 
 ```bash
@@ -186,8 +186,8 @@ Checks the result against the design: SSH works only through the bastion, the
 VMs go out only through the NAT Gateway, nothing else has a public IP, and each
 storage node has its empty data disk. Expect `12 passed, 0 failed`.
 
-On a subscription without the 4 vCPU cap, leave out `-var-file=free-trial.tfvars`
-to get the production layout (dedicated control plane, 3 workers).
+For the production layout, leave out `-var-file=small.tfvars`
+(dedicated control plane, 3 workers).
 
 ## 4. Part 2: OS baseline with Ansible
 
@@ -405,7 +405,7 @@ ssh -F ssh_config rke2lab-worker-1
 Opens a shell on a VM through the bastion, using the SSH config Terraform wrote.
 
 ```bash
-terraform -chdir=terraform destroy -var-file=free-trial.tfvars
+terraform -chdir=terraform destroy -var-file=small.tfvars
 ```
 
 Deletes everything this lab created in Azure. Costs drop to zero. Sections 3 to
@@ -420,7 +420,7 @@ Problems I actually hit, and the fix for each.
 | SSH to the bastion times out after working before | Your home IP changed, and the NSG only allows the old one | Update `admin_cidr` in `terraform.tfvars`, run `terraform apply` again |
 | `REMOTE HOST IDENTIFICATION HAS CHANGED` after a rebuild | New VMs, same private IPs | `terraform apply` resets the lab's `known_hosts` file; or delete `known_hosts` in the repo root |
 | `UNPROTECTED PRIVATE KEY FILE`, or Ansible ignores `ansible.cfg` | C: drive mounted without Linux permissions | The `/etc/wsl.conf` change in section 1, then `wsl --shutdown` |
-| `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | Free Trial allows 4 vCPUs per region | Use `free-trial.tfvars`, and a region with nothing else running in it |
+| `OperationNotAllowed ... exceeding approved Total Regional Cores quota` | The region's vCPU quota is lower than the layout needs | Use `small.tfvars` (4 vCPUs in total), pick a region with free quota, or ask Azure for a higher quota |
 | Nodes stay `NotReady`; `helm-install-rke2-cilium` shows `UnexpectedAdmissionError` | The control plane's default CPU reservations fill the 1 vCPU cp-1, so the Cilium install job can't be placed | `control-plane-resource-requests` in the server config (already set) |
 | `Wait for WireGuard to be active` retries and fails, yet `cilium-dbg encrypt status` shows WireGuard on every node | The check piped kubectl into `grep -q` under `set -o pipefail`. grep exits at the first match, kubectl gets a broken pipe (exit 141), and pipefail reports a failure | Capture the output first, then grep it (already fixed in the role and the test) |
 | Ceph is `HEALTH_OK` or close, but PVCs stay `Pending` and there are no `rook-ceph.rbd.csi.ceph.com` pods | Since Rook v1.20 the CSI drivers are a separate chart (`ceph-csi-drivers`), and only the operator and cluster charts were installed | Install the drivers chart with Rook's values (already in the role: `ceph-csi-drivers.yaml.j2`) |

@@ -108,7 +108,7 @@ safe is what Part 7 is about.
 
 ### One vCPU on the control plane, and what it broke
 
-RKE2 recommends 2 vCPUs for a server node. The Free Trial leaves 1, and the
+RKE2 recommends 2 vCPUs for a server node. The small layout gives it 1, and the
 first install showed what that means.
 
 Every Kubernetes component reserves some CPU, and the scheduler only places a

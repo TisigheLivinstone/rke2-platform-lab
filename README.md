@@ -27,7 +27,7 @@ to a deployed and tested lab, plus the problems I hit along the way and their
 fixes. In short, from WSL:
 
 ```bash
-terraform -chdir=terraform apply -var-file=free-trial.tfvars   # Part 1
+terraform -chdir=terraform apply -var-file=small.tfvars   # Part 1
 bash tests/01-foundation.sh
 cd ansible && ansible-playbook playbooks/baseline.yml && cd ..     # Part 2
 bash tests/02-automation.sh
@@ -41,6 +41,6 @@ bash tests/05-storage.sh
 
 `ansible-playbook site.yml` runs every Ansible part in order.
 
-`free-trial.tfvars` fits the layout into the 4 vCPUs an Azure Free Trial allows
-per region (2 workers, 1 vCPU VMs). Without it you get the production layout:
+`small.tfvars` is a low-cost layout that fits in 4 vCPUs
+(2 workers, 1 vCPU VMs). Without it you get the production layout:
 a dedicated control plane and 3 workers.

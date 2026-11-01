@@ -101,7 +101,7 @@ spec:
               - name: {{ rook_data_disk }}
 {% endfor %}
 
-      # cp-1 is the third storage node on the Free Trial layout, so the mon and
+      # cp-1 is the third storage node on the small layout, so the mon and
       # OSD (and the job that prepares the OSD's disk) tolerate its taint.
       # Everything else, apps included, stays off the control plane.
       placement:
