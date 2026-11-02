@@ -5,7 +5,7 @@ with monitoring, backups and GitOps on top. I build it one layer at a time.
 Each layer is deployed and tested before the next one starts, and each write-up
 explains what problem the layer solves and why I chose it over the alternatives.
 
-![The platform so far: Azure network, RKE2, Cilium with WireGuard, and Rook-Ceph storage on every node's data disk](docs/architecture/storage.drawio.png)
+![The platform: private Azure network, RKE2 on three VMs, Cilium with WireGuard between nodes, and Rook-Ceph on every node's data disk](docs/architecture/platform.drawio.png)
 
 ## Parts
 
